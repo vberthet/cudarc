@@ -93,7 +93,7 @@ pub fn compile_ptx_with_opts<S: AsRef<str>>(
 }
 
 pub(crate) struct Program {
-    prog: sys::nvrtcProgram,
+    prog: sys::hiprtcProgram,
 }
 
 impl Program {

@@ -37,7 +37,7 @@ impl CudaModule {
     /// Returns reference to function with `name`. If function
     /// was not already loaded into CudaModule, then `None`
     /// is returned.
-    pub(crate) fn get_func(&self, name: &str) -> Option<sys::CUfunction> {
+    pub(crate) fn get_func(&self, name: &str) -> Option<sys::hipFunction_t> {
         self.functions.get(name).cloned()
     }
 
@@ -345,7 +345,7 @@ extern \"C\" __global__ void sin_kernel(float *out, const float *inp, size_t num
 
             let b = dev.sync_reclaim(b).unwrap();
             for v in b {
-                assert_eq!(v, 0.841471);
+                assert_eq!(v, 0.84147096);
             }
         }
     }
@@ -381,6 +381,8 @@ extern \"C\" __global__ void sin_kernel(float *out, const float *inp, size_t num
     }
 
     const TEST_KERNELS: &str = "
+#include <assert.h>
+
 extern \"C\" __global__ void int_8bit(signed char s_min, char s_max, unsigned char u_min, unsigned char u_max) {
     assert(s_min == -128);
     assert(s_max == 127);

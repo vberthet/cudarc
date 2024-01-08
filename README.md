@@ -16,6 +16,18 @@ Safe abstractions over:
 **Pre-alpha state**, expect breaking changes and not all cuda functions
 contain a safe wrapper. **Contributions welcome for any that aren't included!**
 
+This is a quick and dirty port to ROCM/HIP runtime, do not use in production !!!
+
+| Feature  | Status | Comment                   |
+|----------|--------|---------------------------|
+| cublas   | ✅      |                           |
+| cublaslt | ❌      | Not tested, it might work | 
+| cudnn    | ❌      | Not ported                |
+| curand   | ✅      |                           |
+| driver   | ✅      |                           |
+| nccl     | ✅      |                           |
+| nvrtc    | ⚠️     | One original test fails   |
+
 # Design
 
 Goals are:

@@ -6,9 +6,9 @@ use half::f16;
 
 extern "C" {
     pub fn cublasHgemm(
-        handle: sys::cublasHandle_t,
-        transa: sys::cublasOperation_t,
-        transb: sys::cublasOperation_t,
+        handle: sys::hipblasHandle_t,
+        transa: sys::hipblasOperation_t,
+        transb: sys::hipblasOperation_t,
         m: c_int,
         n: c_int,
         k: c_int,
@@ -20,14 +20,14 @@ extern "C" {
         beta: *const f16,
         C: *mut f16,
         ldc: c_int,
-    ) -> sys::cublasStatus_t;
+    ) -> sys::hipblasStatus_t;
 }
 
 extern "C" {
     pub fn cublasHgemmStridedBatched(
-        handle: sys::cublasHandle_t,
-        transa: sys::cublasOperation_t,
-        transb: sys::cublasOperation_t,
+        handle: sys::hipblasHandle_t,
+        transa: sys::hipblasOperation_t,
+        transb: sys::hipblasOperation_t,
         m: c_int,
         n: c_int,
         k: c_int,
@@ -43,5 +43,5 @@ extern "C" {
         ldc: c_int,
         strideC: c_longlong,
         batchCount: c_int,
-    ) -> sys::cublasStatus_t;
+    ) -> sys::hipblasStatus_t;
 }

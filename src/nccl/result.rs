@@ -183,7 +183,7 @@ pub unsafe fn reduce(
     op: sys::ncclRedOp_t,
     root: ::core::ffi::c_int,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclReduce(sendbuff, recvbuff, count, datatype, op, root, comm, stream).result()
 }
@@ -198,7 +198,7 @@ pub unsafe fn broadcast(
     datatype: sys::ncclDataType_t,
     root: ::core::ffi::c_int,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclBroadcast(sendbuff, recvbuff, count, datatype, root, comm, stream).result()
 }
@@ -213,7 +213,7 @@ pub unsafe fn all_reduce(
     datatype: sys::ncclDataType_t,
     op: sys::ncclRedOp_t,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclAllReduce(sendbuff, recvbuff, count, datatype, op, comm, stream).result()
 }
@@ -228,7 +228,7 @@ pub unsafe fn reduce_scatter(
     datatype: sys::ncclDataType_t,
     op: sys::ncclRedOp_t,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclReduceScatter(sendbuff, recvbuff, recvcount, datatype, op, comm, stream).result()
 }
@@ -242,7 +242,7 @@ pub unsafe fn all_gather(
     sendcount: usize,
     datatype: sys::ncclDataType_t,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclAllGather(sendbuff, recvbuff, sendcount, datatype, comm, stream).result()
 }
@@ -256,7 +256,7 @@ pub unsafe fn send(
     datatype: sys::ncclDataType_t,
     peer: ::core::ffi::c_int,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclSend(sendbuff, count, datatype, peer, comm, stream).result()
 }
@@ -270,7 +270,7 @@ pub unsafe fn recv(
     datatype: sys::ncclDataType_t,
     peer: ::core::ffi::c_int,
     comm: sys::ncclComm_t,
-    stream: sys::cudaStream_t,
+    stream: sys::hipStream_t,
 ) -> Result<NcclStatus, NcclError> {
     sys::ncclRecv(recvbuff, count, datatype, peer, comm, stream).result()
 }
@@ -323,7 +323,7 @@ mod tests {
                     sys::ncclDataType_t::ncclFloat32,
                     sys::ncclRedOp_t::ncclSum,
                     comms[i],
-                    dev.stream as sys::cudaStream_t,
+                    dev.stream as sys::hipStream_t,
                 )
                 .unwrap();
             }
@@ -364,7 +364,7 @@ mod tests {
                             sys::ncclDataType_t::ncclFloat32,
                             sys::ncclRedOp_t::ncclSum,
                             comm,
-                            dev.stream as sys::cudaStream_t,
+                            dev.stream as sys::hipStream_t,
                         )
                         .unwrap();
                     }

@@ -2,15 +2,14 @@
 set -exu
 
 bindgen \
-  --whitelist-type="^nvrtc.*" \
-  --whitelist-function="^nvrtc.*" \
+  --allowlist-type="^hiprtc.*" \
+  --allowlist-function="^hiprtc.*" \
   --default-enum-style=rust \
   --no-doc-comments \
   --with-derive-default \
   --with-derive-eq \
   --with-derive-hash \
   --with-derive-ord \
-  --size_t-is-usize \
   --use-core \
-  wrapper.h -- -I/usr/local/cuda/include \
+  wrapper.h -- -I/opt/rocm/include \
   > sys.rs

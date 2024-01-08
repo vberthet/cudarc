@@ -43,28 +43,28 @@ unsafe impl DeviceRepr for half::bf16 {}
 unsafe impl<T: DeviceRepr> DeviceRepr for &mut CudaSlice<T> {
     #[inline(always)]
     fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        (&self.cu_device_ptr) as *const sys::CUdeviceptr as *mut std::ffi::c_void
+        (&self.cu_device_ptr) as *const sys::hipDeviceptr_t as *mut std::ffi::c_void
     }
 }
 
 unsafe impl<T: DeviceRepr> DeviceRepr for &CudaSlice<T> {
     #[inline(always)]
     fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        (&self.cu_device_ptr) as *const sys::CUdeviceptr as *mut std::ffi::c_void
+        (&self.cu_device_ptr) as *const sys::hipDeviceptr_t as *mut std::ffi::c_void
     }
 }
 
 unsafe impl<'a, T: DeviceRepr> DeviceRepr for &CudaView<'a, T> {
     #[inline(always)]
     fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        (&self.ptr) as *const sys::CUdeviceptr as *mut std::ffi::c_void
+        (&self.ptr) as *const sys::hipDeviceptr_t as *mut std::ffi::c_void
     }
 }
 
 unsafe impl<'a, T: DeviceRepr> DeviceRepr for &mut CudaViewMut<'a, T> {
     #[inline(always)]
     fn as_kernel_param(&self) -> *mut std::ffi::c_void {
-        (&self.ptr) as *const sys::CUdeviceptr as *mut std::ffi::c_void
+        (&self.ptr) as *const sys::hipDeviceptr_t as *mut std::ffi::c_void
     }
 }
 
@@ -73,7 +73,7 @@ impl<T> CudaSlice<T> {
     /// to the owner to free this value**.
     ///
     /// Drops the underlying host_buf if there is one.
-    pub fn leak(mut self) -> sys::CUdeviceptr {
+    pub fn leak(mut self) -> sys::hipDeviceptr_t {
         if let Some(host_buf) = std::mem::take(&mut self.host_buf) {
             drop(host_buf);
         }
@@ -94,7 +94,7 @@ impl CudaDevice {
     ///   should be called on the memory.
     pub unsafe fn upgrade_device_ptr<T>(
         self: &Arc<Self>,
-        cu_device_ptr: sys::CUdeviceptr,
+        cu_device_ptr: sys::hipDeviceptr_t,
         len: usize,
     ) -> CudaSlice<T> {
         CudaSlice {

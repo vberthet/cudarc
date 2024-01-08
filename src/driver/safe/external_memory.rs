@@ -44,7 +44,7 @@ impl CudaDevice {
 /// The imported external memory will be destroyed when this struct is dropped.
 #[derive(Debug)]
 pub struct ExternalMemory {
-    external_memory: sys::CUexternalMemory,
+    external_memory: sys::hipExternalMemory_t,
     size: u64,
     device: Arc<CudaDevice>,
     _file: ManuallyDrop<File>,
@@ -115,7 +115,7 @@ impl ExternalMemory {
 /// The underlying mapped buffer will be freed when this struct is dropped.
 #[derive(Debug)]
 pub struct MappedBuffer {
-    device_ptr: sys::CUdeviceptr,
+    device_ptr: sys::hipDeviceptr_t,
     len: usize,
     external_memory: ExternalMemory,
 }
@@ -134,7 +134,7 @@ impl DeviceSlice<u8> for MappedBuffer {
 }
 
 impl DevicePtr<u8> for MappedBuffer {
-    fn device_ptr(&self) -> &sys::CUdeviceptr {
+    fn device_ptr(&self) -> &sys::hipDeviceptr_t {
         &self.device_ptr
     }
 }

@@ -14,6 +14,7 @@ use spin::RwLock;
 use std::sync::RwLock;
 
 use std::{collections::BTreeMap, marker::Unpin, pin::Pin, sync::Arc, vec::Vec};
+use crate::driver::sys::hipDeviceptr_t;
 
 /// A wrapper around [sys::CUdevice], [sys::CUcontext], [sys::CUstream],
 /// and [CudaFunction].
@@ -31,12 +32,12 @@ use std::{collections::BTreeMap, marker::Unpin, pin::Pin, sync::Arc, vec::Vec};
 /// can outlive the [CudaDevice]
 #[derive(Debug)]
 pub struct CudaDevice {
-    pub(crate) cu_device: sys::CUdevice,
-    pub(crate) cu_primary_ctx: sys::CUcontext,
+    pub(crate) cu_device: sys::hipDevice_t,
+    pub(crate) cu_primary_ctx: sys::hipCtx_t,
     /// The stream that all work is executed on.
-    pub(crate) stream: sys::CUstream,
+    pub(crate) stream: sys::hipStream_t,
     /// Used to synchronize with stream
-    pub(crate) event: sys::CUevent,
+    pub(crate) event: sys::hipEvent_t,
     pub(crate) modules: RwLock<BTreeMap<String, CudaModule>>,
     pub(crate) ordinal: usize,
     pub(crate) is_async: bool,
@@ -58,12 +59,12 @@ impl CudaDevice {
         unsafe { result::ctx::set_current(cu_primary_ctx) }.unwrap();
 
         // can fail with OOM
-        let event = result::event::create(sys::CUevent_flags::CU_EVENT_DISABLE_TIMING)?;
+        let event = result::event::create(sys::hipEventDisableTiming)?;
 
         let value = unsafe {
             result::device::get_attribute(
                 cu_device,
-                sys::CUdevice_attribute_enum::CU_DEVICE_ATTRIBUTE_MEMORY_POOLS_SUPPORTED,
+                sys::hipDeviceAttribute_t::hipDeviceAttributeMemoryPoolsSupported,
             )?
         };
         let is_async = value > 0;
@@ -98,7 +99,7 @@ impl CudaDevice {
     ///
     /// **You must not free/release the device pointer**, as it is still
     /// owned by the [CudaDevice].
-    pub fn cu_device(&self) -> &sys::CUdevice {
+    pub fn cu_device(&self) -> &sys::hipDevice_t {
         &self.cu_device
     }
 
@@ -110,7 +111,7 @@ impl CudaDevice {
     ///
     /// **You must not free/release the context pointer**, as it is still
     /// owned by the [CudaDevice].
-    pub fn cu_primary_ctx(&self) -> &sys::CUcontext {
+    pub fn cu_primary_ctx(&self) -> &sys::hipCtx_t {
         &self.cu_primary_ctx
     }
 
@@ -123,12 +124,12 @@ impl CudaDevice {
     ///
     /// **You must not free/release the stream pointer**, as it is still
     /// owned by the [CudaDevice].
-    pub fn cu_stream(&self) -> &sys::CUstream {
+    pub fn cu_stream(&self) -> &sys::hipStream_t {
         &self.stream
     }
 
     /// Get the value of the specified attribute of this [CudaDevice].
-    pub fn attribute(&self, attrib: sys::CUdevice_attribute) -> Result<i32, result::DriverError> {
+    pub fn attribute(&self, attrib: sys::hipDeviceAttribute_t) -> Result<i32, result::DriverError> {
         unsafe { result::device::get_attribute(self.cu_device, attrib) }
     }
 }
@@ -191,7 +192,7 @@ impl Drop for CudaDevice {
 /// by the [CudaFunction]**.
 #[derive(Debug)]
 pub struct CudaSlice<T> {
-    pub(crate) cu_device_ptr: sys::CUdeviceptr,
+    pub(crate) cu_device_ptr: sys::hipDeviceptr_t,
     pub(crate) len: usize,
     pub(crate) device: Arc<CudaDevice>,
     pub(crate) host_buf: Option<Pin<Vec<T>>>,
@@ -248,8 +249,8 @@ impl<T: Clone + Default + DeviceRepr + Unpin> TryFrom<CudaSlice<T>> for Vec<T> {
 /// See [CudaModule::get_fn()] for retrieving function handles.
 #[derive(Debug)]
 pub(crate) struct CudaModule {
-    pub(crate) cu_module: sys::CUmodule,
-    pub(crate) functions: BTreeMap<&'static str, sys::CUfunction>,
+    pub(crate) cu_module: sys::hipModule_t,
+    pub(crate) functions: BTreeMap<&'static str, sys::hipFunction_t>,
 }
 
 unsafe impl Send for CudaModule {}
@@ -258,101 +259,100 @@ unsafe impl Sync for CudaModule {}
 /// Wrapper around [sys::CUfunction]. Used by [crate::driver::LaunchAsync].
 #[derive(Debug, Clone)]
 pub struct CudaFunction {
-    pub(crate) cu_function: sys::CUfunction,
+    pub(crate) cu_function: sys::hipFunction_t,
     pub(crate) device: Arc<CudaDevice>,
 }
 
 impl CudaFunction {
-    pub fn occupancy_available_dynamic_smem_per_block(
-        &self,
-        num_blocks: u32,
-        block_size: u32,
-    ) -> Result<usize, result::DriverError> {
-        let mut dynamic_smem_size: usize = 0;
+    // pub fn occupancy_available_dynamic_smem_per_block(
+    //     &self,
+    //     num_blocks: u32,
+    //     block_size: u32,
+    // ) -> Result<usize, result::DriverError> {
+    //     let mut dynamic_smem_size: usize = 0;
+    //
+    //     unsafe {
+    //         sys::cuOccupancyAvailableDynamicSMemPerBlock(
+    //             &mut dynamic_smem_size,
+    //             self.cu_function,
+    //             num_blocks as std::ffi::c_int,
+    //             block_size as std::ffi::c_int,
+    //         )
+    //         .result()?
+    //     };
+    //
+    //     Ok(dynamic_smem_size)
+    // }
 
-        unsafe {
-            sys::cuOccupancyAvailableDynamicSMemPerBlock(
-                &mut dynamic_smem_size,
-                self.cu_function,
-                num_blocks as std::ffi::c_int,
-                block_size as std::ffi::c_int,
-            )
-            .result()?
-        };
+    // pub fn occupancy_max_active_blocks_per_multiprocessor(
+    //     &self,
+    //     block_size: u32,
+    //     dynamic_smem_size: usize,
+    //     flags: Option<sys::CUoccupancy_flags_enum>,
+    // ) -> Result<u32, result::DriverError> {
+    //     let mut num_blocks: std::ffi::c_int = 0;
+    //     let flags = flags.unwrap_or(sys::CUoccupancy_flags_enum::CU_OCCUPANCY_DEFAULT);
+    //
+    //     unsafe {
+    //         sys::hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+    //             &mut num_blocks,
+    //             self.cu_function,
+    //             block_size as std::ffi::c_int,
+    //             dynamic_smem_size,
+    //             flags as std::ffi::c_uint,
+    //         )
+    //         .result()?
+    //     };
+    //
+    //     Ok(num_blocks as u32)
+    // }
 
-        Ok(dynamic_smem_size)
-    }
-
-    pub fn occupancy_max_active_blocks_per_multiprocessor(
-        &self,
-        block_size: u32,
-        dynamic_smem_size: usize,
-        flags: Option<sys::CUoccupancy_flags_enum>,
-    ) -> Result<u32, result::DriverError> {
-        let mut num_blocks: std::ffi::c_int = 0;
-        let flags = flags.unwrap_or(sys::CUoccupancy_flags_enum::CU_OCCUPANCY_DEFAULT);
-
-        unsafe {
-            sys::cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
-                &mut num_blocks,
-                self.cu_function,
-                block_size as std::ffi::c_int,
-                dynamic_smem_size,
-                flags as std::ffi::c_uint,
-            )
-            .result()?
-        };
-
-        Ok(num_blocks as u32)
-    }
-
-    pub fn occupancy_max_active_clusters(
-        &self,
-        config: crate::driver::LaunchConfig,
-        shared_mem_size: u32,
-    ) -> Result<u32, result::DriverError> {
-        let mut num_clusters: std::ffi::c_int = 0;
-
-        let cfg = sys::CUlaunchConfig {
-            gridDimX: config.grid_dim.0,
-            gridDimY: config.grid_dim.1,
-            gridDimZ: config.grid_dim.2,
-            blockDimX: config.block_dim.0,
-            blockDimY: config.block_dim.1,
-            blockDimZ: config.block_dim.2,
-            sharedMemBytes: shared_mem_size as std::ffi::c_uint,
-            hStream: self.device.stream,
-            attrs: std::ptr::null_mut(),
-            numAttrs: 0,
-        };
-
-        unsafe {
-            sys::cuOccupancyMaxActiveClusters(&mut num_clusters, self.cu_function, &cfg).result()?
-        };
-
-        Ok(num_clusters as u32)
-    }
+    // pub fn occupancy_max_active_clusters(
+    //     &self,
+    //     config: crate::driver::LaunchConfig,
+    //     shared_mem_size: u32,
+    // ) -> Result<u32, result::DriverError> {
+    //     let mut num_clusters: std::ffi::c_int = 0;
+    //
+    //     let cfg = sys::CUlaunchConfig {
+    //         gridDimX: config.grid_dim.0,
+    //         gridDimY: config.grid_dim.1,
+    //         gridDimZ: config.grid_dim.2,
+    //         blockDimX: config.block_dim.0,
+    //         blockDimY: config.block_dim.1,
+    //         blockDimZ: config.block_dim.2,
+    //         sharedMemBytes: shared_mem_size as std::ffi::c_uint,
+    //         hStream: self.device.stream,
+    //         attrs: std::ptr::null_mut(),
+    //         numAttrs: 0,
+    //     };
+    //
+    //     unsafe {
+    //         sys::cuOccupancyMaxActiveClusters(&mut num_clusters, self.cu_function, &cfg).result()?
+    //     };
+    //
+    //     Ok(num_clusters as u32)
+    // }
 
     pub fn occupancy_max_potential_block_size(
         &self,
         block_size_to_dynamic_smem_size: extern "C" fn(block_size: std::ffi::c_int) -> usize,
         dynamic_smem_size: usize,
         block_size_limit: u32,
-        flags: Option<sys::CUoccupancy_flags_enum>,
+        flags: Option<u32>,
     ) -> Result<(u32, u32), result::DriverError> {
         let mut min_grid_size: std::ffi::c_int = 0;
         let mut block_size: std::ffi::c_int = 0;
-        let flags = flags.unwrap_or(sys::CUoccupancy_flags_enum::CU_OCCUPANCY_DEFAULT);
+        let flags = flags.unwrap_or(sys::hipOccupancyDefault);
 
         unsafe {
-            sys::cuOccupancyMaxPotentialBlockSizeWithFlags(
+            sys::hipModuleOccupancyMaxPotentialBlockSizeWithFlags(
                 &mut min_grid_size,
                 &mut block_size,
                 self.cu_function,
-                Some(block_size_to_dynamic_smem_size),
                 dynamic_smem_size,
                 block_size_limit as std::ffi::c_int,
-                flags as std::ffi::c_uint,
+                flags,
             )
             .result()?
         };
@@ -360,33 +360,33 @@ impl CudaFunction {
         Ok((min_grid_size as u32, block_size as u32))
     }
 
-    pub fn occupancy_max_potential_cluster_size(
-        &self,
-        config: crate::driver::LaunchConfig,
-        shared_mem_size: u32,
-    ) -> Result<u32, result::DriverError> {
-        let mut cluster_size: std::ffi::c_int = 0;
-
-        let cfg = sys::CUlaunchConfig {
-            gridDimX: config.grid_dim.0,
-            gridDimY: config.grid_dim.1,
-            gridDimZ: config.grid_dim.2,
-            blockDimX: config.block_dim.0,
-            blockDimY: config.block_dim.1,
-            blockDimZ: config.block_dim.2,
-            sharedMemBytes: shared_mem_size as std::ffi::c_uint,
-            hStream: self.device.stream,
-            attrs: std::ptr::null_mut(),
-            numAttrs: 0,
-        };
-
-        unsafe {
-            sys::cuOccupancyMaxPotentialClusterSize(&mut cluster_size, self.cu_function, &cfg)
-                .result()?
-        };
-
-        Ok(cluster_size as u32)
-    }
+    // pub fn occupancy_max_potential_cluster_size(
+    //     &self,
+    //     config: crate::driver::LaunchConfig,
+    //     shared_mem_size: u32,
+    // ) -> Result<u32, result::DriverError> {
+    //     let mut cluster_size: std::ffi::c_int = 0;
+    //
+    //     let cfg = sys::CUlaunchConfig {
+    //         gridDimX: config.grid_dim.0,
+    //         gridDimY: config.grid_dim.1,
+    //         gridDimZ: config.grid_dim.2,
+    //         blockDimX: config.block_dim.0,
+    //         blockDimY: config.block_dim.1,
+    //         blockDimZ: config.block_dim.2,
+    //         sharedMemBytes: shared_mem_size as std::ffi::c_uint,
+    //         hStream: self.device.stream,
+    //         attrs: std::ptr::null_mut(),
+    //         numAttrs: 0,
+    //     };
+    //
+    //     unsafe {
+    //         sys::cuOccupancyMaxPotentialClusterSize(&mut cluster_size, self.cu_function, &cfg)
+    //             .result()?
+    //     };
+    //
+    //     Ok(cluster_size as u32)
+    // }
 }
 
 unsafe impl Send for CudaFunction {}
@@ -415,7 +415,7 @@ unsafe impl Sync for CudaFunction {}
 /// - 5 will happen on the default stream **after the default stream waits for 2**
 #[derive(Debug)]
 pub struct CudaStream {
-    pub stream: sys::CUstream,
+    pub stream: sys::hipStream_t,
     device: Arc<CudaDevice>,
 }
 
@@ -447,7 +447,7 @@ impl CudaDevice {
             result::stream::wait_event(
                 self.stream,
                 self.event,
-                sys::CUevent_wait_flags::CU_EVENT_WAIT_DEFAULT,
+                result::stream::StreamKind::Default,
             )
         }
     }
@@ -463,7 +463,7 @@ impl CudaStream {
             result::stream::wait_event(
                 self.stream,
                 self.device.event,
-                sys::CUevent_wait_flags::CU_EVENT_WAIT_DEFAULT,
+                result::stream::StreamKind::Default,
             )
         }
     }
@@ -481,8 +481,8 @@ impl Drop for CudaStream {
 /// A immutable sub-view into a [CudaSlice] created by [CudaSlice::try_slice()].
 #[derive(Debug)]
 pub struct CudaView<'a, T> {
-    pub(crate) root: &'a sys::CUdeviceptr,
-    pub(crate) ptr: sys::CUdeviceptr,
+    pub(crate) root: &'a sys::hipDeviceptr_t,
+    pub(crate) ptr: sys::hipDeviceptr_t,
     pub(crate) len: usize,
     marker: PhantomData<T>,
 }
@@ -499,7 +499,7 @@ impl<T> CudaSlice<T> {
     pub fn try_slice(&self, range: impl RangeBounds<usize>) -> Option<CudaView<'_, T>> {
         range.bounds(..self.len()).map(|(start, end)| CudaView {
             root: &self.cu_device_ptr,
-            ptr: self.cu_device_ptr + (start * std::mem::size_of::<T>()) as u64,
+            ptr: (self.cu_device_ptr as u64 + (start * std::mem::size_of::<T>()) as u64) as hipDeviceptr_t,
             len: end - start,
             marker: PhantomData,
         })
@@ -534,7 +534,7 @@ impl<'a, T> CudaView<'a, T> {
     pub fn try_slice(&self, range: impl RangeBounds<usize>) -> Option<CudaView<'a, T>> {
         range.bounds(..self.len()).map(|(start, end)| CudaView {
             root: self.root,
-            ptr: self.ptr + (start * std::mem::size_of::<T>()) as u64,
+            ptr: (self.ptr as u64 + (start * std::mem::size_of::<T>()) as u64) as hipDeviceptr_t,
             len: end - start,
             marker: PhantomData,
         })
@@ -544,8 +544,8 @@ impl<'a, T> CudaView<'a, T> {
 /// A mutable sub-view into a [CudaSlice] created by [CudaSlice::try_slice_mut()].
 #[derive(Debug)]
 pub struct CudaViewMut<'a, T> {
-    pub(crate) root: &'a mut sys::CUdeviceptr,
-    pub(crate) ptr: sys::CUdeviceptr,
+    pub(crate) root: &'a mut sys::hipDeviceptr_t,
+    pub(crate) ptr: sys::hipDeviceptr_t,
     pub(crate) len: usize,
     marker: PhantomData<T>,
 }
@@ -561,7 +561,7 @@ impl<T> CudaSlice<T> {
     /// Fallible version of [CudaSlice::slice_mut]
     pub fn try_slice_mut(&mut self, range: impl RangeBounds<usize>) -> Option<CudaViewMut<'_, T>> {
         range.bounds(..self.len()).map(|(start, end)| CudaViewMut {
-            ptr: self.cu_device_ptr + (start * std::mem::size_of::<T>()) as u64,
+            ptr: (self.cu_device_ptr as u64 + (start * std::mem::size_of::<T>()) as u64) as hipDeviceptr_t,
             root: &mut self.cu_device_ptr,
             len: end - start,
             marker: PhantomData,
@@ -597,7 +597,7 @@ impl<'a, T> CudaViewMut<'a, T> {
     pub fn try_slice<'b: 'a>(&'b self, range: impl RangeBounds<usize>) -> Option<CudaView<'a, T>> {
         range.bounds(..self.len()).map(|(start, end)| CudaView {
             root: self.root,
-            ptr: self.ptr + (start * std::mem::size_of::<T>()) as u64,
+            ptr: (self.ptr as u64 + (start * std::mem::size_of::<T>()) as u64) as hipDeviceptr_t,
             len: end - start,
             marker: PhantomData,
         })
@@ -616,7 +616,7 @@ impl<'a, T> CudaViewMut<'a, T> {
         range: impl RangeBounds<usize>,
     ) -> Option<CudaViewMut<'a, T>> {
         range.bounds(..self.len()).map(|(start, end)| CudaViewMut {
-            ptr: self.ptr + (start * std::mem::size_of::<T>()) as u64,
+            ptr: (self.ptr as u64 + (start * std::mem::size_of::<T>()) as u64) as hipDeviceptr_t,
             root: self.root,
             len: end - start,
             marker: PhantomData,

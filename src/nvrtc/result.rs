@@ -10,13 +10,13 @@ use std::{ffi::CString, vec::Vec};
 /// Wrapper around [sys::nvrtcResult]. See
 /// [nvrtcResult docs](https://docs.nvidia.com/cuda/nvrtc/index.html#group__error_1g31e41ef222c0ea75b4c48f715b3cd9f0)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NvrtcError(pub sys::nvrtcResult);
+pub struct NvrtcError(pub sys::hiprtcResult);
 
-impl sys::nvrtcResult {
+impl sys::hiprtcResult {
     /// Transforms into a [Result] of [NvrtcError]
     pub fn result(self) -> Result<(), NvrtcError> {
         match self {
-            sys::nvrtcResult::NVRTC_SUCCESS => Ok(()),
+            sys::hiprtcResult::HIPRTC_SUCCESS => Ok(()),
             _ => Err(NvrtcError(self)),
         }
     }
@@ -41,17 +41,17 @@ impl std::error::Error for NvrtcError {}
 /// # use cudarc::nvrtc::result::*;
 /// let prog = create_program("extern \"C\" __global__ void kernel() { }").unwrap();
 /// ```
-pub fn create_program<S: AsRef<str>>(src: S) -> Result<sys::nvrtcProgram, NvrtcError> {
+pub fn create_program<S: AsRef<str>>(src: S) -> Result<sys::hiprtcProgram, NvrtcError> {
     let src_c = CString::new(src.as_ref()).unwrap();
     let mut prog = MaybeUninit::uninit();
     unsafe {
-        sys::nvrtcCreateProgram(
+        sys::hiprtcCreateProgram(
             prog.as_mut_ptr(),
             src_c.as_c_str().as_ptr(),
             std::ptr::null(),
             0,
-            std::ptr::null(),
-            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
         )
         .result()?;
         Ok(prog.assume_init())
@@ -68,14 +68,14 @@ pub fn create_program<S: AsRef<str>>(src: S) -> Result<sys::nvrtcProgram, NvrtcE
 /// ```rust
 /// # use cudarc::nvrtc::result::*;
 /// let prog = create_program("extern \"C\" __global__ void kernel() { }").unwrap();
-/// unsafe { compile_program(prog, &["--ftz=true", "--fmad=true"]) }.unwrap();
+/// unsafe { compile_program(prog, &["--fmad=true"]) }.unwrap();
 /// ```
 ///
 /// # Safety
 ///
 /// `prog` must be created from [create_program()] and not have been freed by [destroy_program()].
 pub unsafe fn compile_program<O: Clone + Into<Vec<u8>>>(
-    prog: sys::nvrtcProgram,
+    prog: sys::hiprtcProgram,
     options: &[O],
 ) -> Result<(), NvrtcError> {
     let c_strings: Vec<CString> = options
@@ -84,8 +84,8 @@ pub unsafe fn compile_program<O: Clone + Into<Vec<u8>>>(
         .map(|o| CString::new(o).unwrap())
         .collect();
     let c_strs: Vec<&CStr> = c_strings.iter().map(CString::as_c_str).collect();
-    let opts: Vec<*const c_char> = c_strs.iter().cloned().map(CStr::as_ptr).collect();
-    sys::nvrtcCompileProgram(prog, opts.len() as c_int, opts.as_ptr()).result()
+    let mut opts: Vec<*const c_char> = c_strs.iter().cloned().map(CStr::as_ptr).collect();
+    sys::hiprtcCompileProgram(prog, opts.len() as c_int, opts.as_mut_ptr()).result()
 }
 
 /// Releases resources associated with `prog`.
@@ -95,8 +95,8 @@ pub unsafe fn compile_program<O: Clone + Into<Vec<u8>>>(
 /// # Safety
 ///
 /// `prog` must be created from [create_program()] and not have been freed by [destroy_program()].
-pub unsafe fn destroy_program(prog: sys::nvrtcProgram) -> Result<(), NvrtcError> {
-    sys::nvrtcDestroyProgram(&prog as *const _ as *mut _).result()
+pub unsafe fn destroy_program(prog: sys::hiprtcProgram) -> Result<(), NvrtcError> {
+    sys::hiprtcDestroyProgram(&prog as *const _ as *mut _).result()
 }
 
 /// Extract the ptx associated with `prog`. Call [compile_program()] before this.
@@ -108,13 +108,13 @@ pub unsafe fn destroy_program(prog: sys::nvrtcProgram) -> Result<(), NvrtcError>
 ///
 /// `prog` must be created from [create_program()] and not have been freed by [destroy_program()].
 #[allow(clippy::slow_vector_initialization)]
-pub unsafe fn get_ptx(prog: sys::nvrtcProgram) -> Result<Vec<c_char>, NvrtcError> {
+pub unsafe fn get_ptx(prog: sys::hiprtcProgram) -> Result<Vec<c_char>, NvrtcError> {
     let mut size: usize = 0;
-    sys::nvrtcGetPTXSize(prog, &mut size as *mut _).result()?;
+    sys::hiprtcGetCodeSize(prog, &mut size as *mut _).result()?;
 
     let mut ptx_src: Vec<c_char> = Vec::with_capacity(size);
     ptx_src.resize(size, 0);
-    sys::nvrtcGetPTX(prog, ptx_src.as_mut_ptr()).result()?;
+    sys::hiprtcGetCode(prog, ptx_src.as_mut_ptr()).result()?;
     Ok(ptx_src)
 }
 
@@ -127,18 +127,19 @@ pub unsafe fn get_ptx(prog: sys::nvrtcProgram) -> Result<Vec<c_char>, NvrtcError
 ///
 /// `prog` must be created from [create_program()] and not have been freed by [destroy_program()].
 #[allow(clippy::slow_vector_initialization)]
-pub unsafe fn get_program_log(prog: sys::nvrtcProgram) -> Result<Vec<c_char>, NvrtcError> {
+pub unsafe fn get_program_log(prog: sys::hiprtcProgram) -> Result<Vec<c_char>, NvrtcError> {
     let mut size: usize = 0;
-    sys::nvrtcGetProgramLogSize(prog, &mut size as *mut _).result()?;
+    sys::hiprtcGetProgramLogSize(prog, &mut size as *mut _).result()?;
 
     let mut log_src: Vec<c_char> = Vec::with_capacity(size);
     log_src.resize(size, 0);
-    sys::nvrtcGetProgramLog(prog, log_src.as_mut_ptr()).result()?;
+    sys::hiprtcGetProgramLog(prog, log_src.as_mut_ptr()).result()?;
     Ok(log_src)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::println;
     use super::*;
 
     #[test]
@@ -151,14 +152,20 @@ mod tests {
     #[test]
     fn test_compile_program_1_opt() {
         let prog = create_program("extern \"C\" __global__ void kernel() { }").unwrap();
-        unsafe { compile_program(prog, &["--ftz=true"]) }.unwrap();
+        if let Err(e) = unsafe { compile_program(prog, &["-fcuda-flush-denormals-to-zero"]) } {
+            unsafe {
+                let log = get_program_log(prog).unwrap();
+                let log = CStr::from_ptr(log.as_slice().as_ptr());
+                println!("{:?}",log);
+            }
+        }
         unsafe { destroy_program(prog) }.unwrap();
     }
 
     #[test]
     fn test_compile_program_2_opt() {
         let prog = create_program("extern \"C\" __global__ void kernel() { }").unwrap();
-        unsafe { compile_program(prog, &["--ftz=true", "--fmad=true"]) }.unwrap();
+        unsafe { compile_program(prog, &["-fcuda-flush-denormals-to-zero", "-ffast-math"]) }.unwrap();
         unsafe { destroy_program(prog) }.unwrap();
     }
 
@@ -167,7 +174,7 @@ mod tests {
         let prog = create_program("extern \"C\" __global__ void kernel(").unwrap();
         assert_eq!(
             unsafe { compile_program::<&str>(prog, &[]) }.unwrap_err(),
-            NvrtcError(sys::nvrtcResult::NVRTC_ERROR_COMPILATION)
+            NvrtcError(sys::hiprtcResult::HIPRTC_ERROR_COMPILATION)
         );
     }
 

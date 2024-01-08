@@ -2,16 +2,15 @@
 set -exu
 
 bindgen \
-  --whitelist-type="^curand.*" \
-  --whitelist-var="^curand.*" \
-  --whitelist-function="^curand.*" \
+  --allowlist-type="^hiprand.*" \
+  --allowlist-var="^hiprand.*" \
+  --allowlist-function="^hiprand.*" \
   --default-enum-style=rust \
   --no-doc-comments \
   --with-derive-default \
   --with-derive-eq \
   --with-derive-hash \
   --with-derive-ord \
-  --size_t-is-usize \
   --use-core \
-  wrapper.h -- -I/usr/local/cuda/include \
+  wrapper.h -- -I/opt/rocm/include -x c++ -std=c++14  \
   > sys.rs

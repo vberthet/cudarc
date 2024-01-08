@@ -1,1 +1,2 @@
-#include "cublas_v2.h"
+#define __HIP_PLATFORM_AMD__
+#include "hipblas/hipblas.h"

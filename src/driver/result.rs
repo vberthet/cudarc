@@ -18,13 +18,13 @@ use std::mem::MaybeUninit;
 /// Wrapper around [sys::CUresult]. See
 /// nvidia's [CUresult docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html#group__CUDA__TYPES_1gc6c391505e117393cc2558fff6bfc2e9)
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct DriverError(pub sys::CUresult);
+pub struct DriverError(pub sys::hipError_t);
 
-impl sys::CUresult {
+impl sys::hipError_t {
     #[inline]
     pub fn result(self) -> Result<(), DriverError> {
         match self {
-            sys::CUresult::CUDA_SUCCESS => Ok(()),
+            sys::hipError_t::hipSuccess => Ok(()),
             _ => Err(DriverError(self)),
         }
     }
@@ -37,7 +37,7 @@ impl DriverError {
     pub fn error_name(&self) -> Result<&CStr, DriverError> {
         let mut err_str = MaybeUninit::uninit();
         unsafe {
-            sys::cuGetErrorName(self.0, err_str.as_mut_ptr()).result()?;
+            sys::hipDrvGetErrorName(self.0,err_str.as_mut_ptr()).result()?;
             Ok(CStr::from_ptr(err_str.assume_init()))
         }
     }
@@ -48,7 +48,7 @@ impl DriverError {
     pub fn error_string(&self) -> Result<&CStr, DriverError> {
         let mut err_str = MaybeUninit::uninit();
         unsafe {
-            sys::cuGetErrorString(self.0, err_str.as_mut_ptr()).result()?;
+            sys::hipDrvGetErrorString(self.0,err_str.as_mut_ptr()).result()?;
             Ok(CStr::from_ptr(err_str.assume_init()))
         }
     }
@@ -79,7 +79,7 @@ impl std::error::Error for DriverError {}
 ///
 /// See [cuInit() docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__INITIALIZE.html#group__CUDA__INITIALIZE_1g0a2f1517e1bd8502c7194c3a8c134bc3)
 pub fn init() -> Result<(), DriverError> {
-    unsafe { sys::cuInit(0).result() }
+    unsafe { sys::hipInit(0).result() }
 }
 
 pub mod device {
@@ -93,10 +93,10 @@ pub mod device {
 
     /// Get a device for a specific ordinal.
     /// See [cuDeviceGet() docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html#group__CUDA__DEVICE_1g8bdd1cc7201304b01357b8034f6587cb).
-    pub fn get(ordinal: c_int) -> Result<sys::CUdevice, DriverError> {
+    pub fn get(ordinal: c_int) -> Result<sys::hipDevice_t, DriverError> {
         let mut dev = MaybeUninit::uninit();
         unsafe {
-            sys::cuDeviceGet(dev.as_mut_ptr(), ordinal).result()?;
+            sys::hipDeviceGet(dev.as_mut_ptr(), ordinal).result()?;
             Ok(dev.assume_init())
         }
     }
@@ -106,7 +106,7 @@ pub mod device {
     pub fn get_count() -> Result<c_int, DriverError> {
         let mut count = MaybeUninit::uninit();
         unsafe {
-            sys::cuDeviceGetCount(count.as_mut_ptr()).result()?;
+            sys::hipGetDeviceCount(count.as_mut_ptr()).result()?;
             Ok(count.assume_init())
         }
     }
@@ -117,9 +117,9 @@ pub mod device {
     ///
     /// # Safety
     /// Must be a device returned from [get].
-    pub unsafe fn total_mem(dev: sys::CUdevice) -> Result<usize, DriverError> {
+    pub unsafe fn total_mem(dev: sys::hipDevice_t) -> Result<usize, DriverError> {
         let mut bytes = MaybeUninit::uninit();
-        sys::cuDeviceTotalMem_v2(bytes.as_mut_ptr(), dev).result()?;
+        sys::hipDeviceTotalMem(bytes.as_mut_ptr(), dev).result()?;
         Ok(bytes.assume_init())
     }
 
@@ -130,11 +130,11 @@ pub mod device {
     /// # Safety
     /// Must be a device returned from [get].
     pub unsafe fn get_attribute(
-        dev: sys::CUdevice,
-        attrib: sys::CUdevice_attribute,
+        dev: sys::hipDevice_t,
+        attrib: sys::hipDeviceAttribute_t,
     ) -> Result<i32, DriverError> {
         let mut value = MaybeUninit::uninit();
-        sys::cuDeviceGetAttribute(value.as_mut_ptr(), attrib, dev).result()?;
+        sys::hipDeviceGetAttribute(value.as_mut_ptr(), attrib, dev).result()?;
         Ok(value.assume_init())
     }
 }
@@ -148,29 +148,29 @@ pub mod occupancy {
 
     use super::{sys, DriverError};
 
-    /// Returns dynamic shared memory available per block when launching numBlocks blocks on SM.
-    ///
-    /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__OCCUPANCY.html#group__CUDA__OCCUPANCY_1gae02af6a9df9e1bbd51941af631bce69)
-    ///
-    /// # Safety
-    /// Function must exist.
-    pub unsafe fn available_dynamic_shared_mem_per_block(
-        f: sys::CUfunction,
-        num_blocks: c_int,
-        block_size: c_int,
-    ) -> Result<usize, DriverError> {
-        let mut dynamic_smem_size = MaybeUninit::uninit();
-        unsafe {
-            sys::cuOccupancyAvailableDynamicSMemPerBlock(
-                dynamic_smem_size.as_mut_ptr(),
-                f,
-                num_blocks,
-                block_size,
-            )
-            .result()?;
-        }
-        Ok(dynamic_smem_size.assume_init())
-    }
+    // /// Returns dynamic shared memory available per block when launching numBlocks blocks on SM.
+    // ///
+    // /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__OCCUPANCY.html#group__CUDA__OCCUPANCY_1gae02af6a9df9e1bbd51941af631bce69)
+    // ///
+    // /// # Safety
+    // /// Function must exist.
+    // pub unsafe fn available_dynamic_shared_mem_per_block(
+    //     f: sys::hipFunction_t,
+    //     num_blocks: c_int,
+    //     block_size: c_int,
+    // ) -> Result<usize, DriverError> {
+    //     let mut dynamic_smem_size = MaybeUninit::uninit();
+    //     unsafe {
+    //         sys::cuOccupancyAvailableDynamicSMemPerBlock(
+    //             dynamic_smem_size.as_mut_ptr(),
+    //             f,
+    //             num_blocks,
+    //             block_size,
+    //         )
+    //         .result()?;
+    //     }
+    //     Ok(dynamic_smem_size.assume_init())
+    // }
 
     /// Returns occupancy of a function.
     ///
@@ -179,13 +179,13 @@ pub mod occupancy {
     /// # Safety
     /// Function must exist.
     pub unsafe fn max_active_block_per_multiprocessor(
-        f: sys::CUfunction,
+        f: sys::hipFunction_t,
         block_size: c_int,
         dynamic_smem_size: usize,
     ) -> Result<i32, DriverError> {
         let mut num_blocks = MaybeUninit::uninit();
         unsafe {
-            sys::cuOccupancyMaxActiveBlocksPerMultiprocessor(
+            sys::hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
                 num_blocks.as_mut_ptr(),
                 f,
                 block_size,
@@ -203,14 +203,14 @@ pub mod occupancy {
     /// # Safety
     /// Function must exist. No invalid flags.
     pub unsafe fn max_active_block_per_multiprocessor_with_flags(
-        f: sys::CUfunction,
+        f: sys::hipFunction_t,
         block_size: c_int,
         dynamic_smem_size: usize,
         flags: c_uint,
     ) -> Result<i32, DriverError> {
         let mut num_blocks = MaybeUninit::uninit();
         unsafe {
-            sys::cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+            sys::hipModuleOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
                 num_blocks.as_mut_ptr(),
                 f,
                 block_size,
@@ -231,19 +231,17 @@ pub mod occupancy {
     /// # Safety
     /// Function must exist and the shared memory function must be correct.  No invalid flags.
     pub unsafe fn max_potential_block_size(
-        f: sys::CUfunction,
-        block_size_to_dynamic_smem_size: sys::CUoccupancyB2DSize,
+        f: sys::hipFunction_t,
         dynamic_smem_size: usize,
         block_size_limit: c_int,
     ) -> Result<(i32, i32), DriverError> {
         let mut min_grid_size = MaybeUninit::uninit();
         let mut block_size = MaybeUninit::uninit();
         unsafe {
-            sys::cuOccupancyMaxPotentialBlockSize(
+            sys::hipModuleOccupancyMaxPotentialBlockSize(
                 min_grid_size.as_mut_ptr(),
                 block_size.as_mut_ptr(),
                 f,
-                block_size_to_dynamic_smem_size,
                 dynamic_smem_size,
                 block_size_limit,
             )
@@ -261,8 +259,7 @@ pub mod occupancy {
     /// # Safety
     /// Function must exist and the shared memory function must be correct.  No invalid flags.
     pub unsafe fn max_potential_block_size_with_flags(
-        f: sys::CUfunction,
-        block_size_to_dynamic_smem_size: sys::CUoccupancyB2DSize,
+        f: sys::hipFunction_t,
         dynamic_smem_size: usize,
         block_size_limit: c_int,
         flags: c_uint,
@@ -270,11 +267,10 @@ pub mod occupancy {
         let mut min_grid_size = MaybeUninit::uninit();
         let mut block_size = MaybeUninit::uninit();
         unsafe {
-            sys::cuOccupancyMaxPotentialBlockSizeWithFlags(
+            sys::hipModuleOccupancyMaxPotentialBlockSizeWithFlags(
                 min_grid_size.as_mut_ptr(),
                 block_size.as_mut_ptr(),
                 f,
-                block_size_to_dynamic_smem_size,
                 dynamic_smem_size,
                 block_size_limit,
                 flags,
@@ -301,9 +297,9 @@ pub mod primary_ctx {
     /// # Safety
     ///
     /// This is only safe with a device that was returned from [super::device::get].
-    pub unsafe fn retain(dev: sys::CUdevice) -> Result<sys::CUcontext, DriverError> {
+    pub unsafe fn retain(dev: sys::hipDevice_t) -> Result<sys::hipCtx_t, DriverError> {
         let mut ctx = MaybeUninit::uninit();
-        sys::cuDevicePrimaryCtxRetain(ctx.as_mut_ptr(), dev).result()?;
+        sys::hipDevicePrimaryCtxRetain(ctx.as_mut_ptr(), dev).result()?;
         Ok(ctx.assume_init())
     }
 
@@ -314,8 +310,8 @@ pub mod primary_ctx {
     /// # Safety
     ///
     /// This is only safe with a device that was returned from [super::device::get].
-    pub unsafe fn release(dev: sys::CUdevice) -> Result<(), DriverError> {
-        sys::cuDevicePrimaryCtxRelease_v2(dev).result()
+    pub unsafe fn release(dev: sys::hipDevice_t) -> Result<(), DriverError> {
+        sys::hipDevicePrimaryCtxRelease(dev).result()
     }
 }
 
@@ -336,18 +332,18 @@ pub mod ctx {
     /// This has weird behavior depending on the value of `ctx`. See cuda docs for more info.
     /// In general this should only be called with an already initialized context,
     /// and one that wasn't already freed.
-    pub unsafe fn set_current(ctx: sys::CUcontext) -> Result<(), DriverError> {
-        sys::cuCtxSetCurrent(ctx).result()
+    pub unsafe fn set_current(ctx: sys::hipCtx_t) -> Result<(), DriverError> {
+        sys::hipCtxSetCurrent(ctx).result()
     }
 
     /// Returns the CUDA context bound to the calling CPU thread if there is one.
     ///
     /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g8f13165846b73750693640fb3e8380d0)
-    pub fn get_current() -> Result<Option<sys::CUcontext>, DriverError> {
+    pub fn get_current() -> Result<Option<sys::hipCtx_t>, DriverError> {
         let mut ctx = MaybeUninit::uninit();
         unsafe {
-            sys::cuCtxGetCurrent(ctx.as_mut_ptr()).result()?;
-            let ctx: sys::CUcontext = ctx.assume_init();
+            sys::hipCtxGetCurrent(ctx.as_mut_ptr()).result()?;
+            let ctx: sys::hipCtx_t = ctx.assume_init();
             if ctx.is_null() {
                 Ok(None)
             } else {
@@ -382,10 +378,10 @@ pub mod stream {
     }
 
     impl StreamKind {
-        fn flags(self) -> sys::CUstream_flags {
+        fn flags(self) -> ::core::ffi::c_uint {
             match self {
-                Self::Default => sys::CUstream_flags::CU_STREAM_DEFAULT,
-                Self::NonBlocking => sys::CUstream_flags::CU_STREAM_NON_BLOCKING,
+                Self::Default => sys::hipStreamDefault,
+                Self::NonBlocking => sys::hipStreamNonBlocking,
             }
         }
     }
@@ -393,17 +389,17 @@ pub mod stream {
     /// The null stream, which is just a null pointer. **Recommend not using this.**
     ///
     /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/stream-sync-behavior.html#stream-sync-behavior__default-stream)
-    pub fn null() -> sys::CUstream {
+    pub fn null() -> sys::hipStream_t {
         std::ptr::null_mut()
     }
 
     /// Creates a stream with the specified kind.
     ///
     /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html#group__CUDA__STREAM_1ga581f0c5833e21ded8b5a56594e243f4)
-    pub fn create(kind: StreamKind) -> Result<sys::CUstream, DriverError> {
+    pub fn create(kind: StreamKind) -> Result<sys::hipStream_t, DriverError> {
         let mut stream = MaybeUninit::uninit();
         unsafe {
-            sys::cuStreamCreate(stream.as_mut_ptr(), kind.flags() as u32).result()?;
+            sys::hipStreamCreateWithFlags(stream.as_mut_ptr(), kind.flags() as u32).result()?;
             Ok(stream.assume_init())
         }
     }
@@ -416,8 +412,8 @@ pub mod stream {
     ///
     /// This should only be called with stream created by [create] and not already
     /// destroyed. This follows default stream semantics, see relevant cuda docs.
-    pub unsafe fn synchronize(stream: sys::CUstream) -> Result<(), DriverError> {
-        sys::cuStreamSynchronize(stream).result()
+    pub unsafe fn synchronize(stream: sys::hipStream_t) -> Result<(), DriverError> {
+        sys::hipStreamSynchronize(stream).result()
     }
 
     /// Destroys a stream.
@@ -428,8 +424,8 @@ pub mod stream {
     ///
     /// This should only be called with stream created by [create] and not already
     /// destroyed. This follows default stream semantics, see relevant cuda docs.
-    pub unsafe fn destroy(stream: sys::CUstream) -> Result<(), DriverError> {
-        sys::cuStreamDestroy_v2(stream).result()
+    pub unsafe fn destroy(stream: sys::hipStream_t) -> Result<(), DriverError> {
+        sys::hipStreamDestroy(stream).result()
     }
 
     /// Make a compute stream wait on an event.
@@ -439,11 +435,11 @@ pub mod stream {
     /// # Safety
     /// 1. Both stream and event must not have been freed already
     pub unsafe fn wait_event(
-        stream: sys::CUstream,
-        event: sys::CUevent,
-        flags: sys::CUevent_wait_flags,
+        stream: sys::hipStream_t,
+        event: sys::hipEvent_t,
+        flags: StreamKind,
     ) -> Result<(), DriverError> {
-        sys::cuStreamWaitEvent(stream, event, flags as u32).result()
+        sys::hipStreamWaitEvent(stream, event, flags as u32).result()
     }
 }
 
@@ -456,11 +452,11 @@ pub mod stream {
 /// 2. The memory return by this is unset, which may be invalid for `T`.
 /// 3. All uses of this memory must be on the same stream.
 pub unsafe fn malloc_async(
-    stream: sys::CUstream,
+    stream: sys::hipStream_t,
     num_bytes: usize,
-) -> Result<sys::CUdeviceptr, DriverError> {
+) -> Result<sys::hipDeviceptr_t, DriverError> {
     let mut dev_ptr = MaybeUninit::uninit();
-    sys::cuMemAllocAsync(dev_ptr.as_mut_ptr(), num_bytes, stream).result()?;
+    sys::hipMallocAsync(dev_ptr.as_mut_ptr(), num_bytes, stream).result()?;
     Ok(dev_ptr.assume_init())
 }
 
@@ -470,9 +466,9 @@ pub unsafe fn malloc_async(
 ///
 /// # Safety
 /// 1. The memory return by this is unset, which may be invalid for `T`.
-pub unsafe fn malloc_sync(num_bytes: usize) -> Result<sys::CUdeviceptr, DriverError> {
+pub unsafe fn malloc_sync(num_bytes: usize) -> Result<sys::hipDeviceptr_t, DriverError> {
     let mut dev_ptr = MaybeUninit::uninit();
-    sys::cuMemAlloc_v2(dev_ptr.as_mut_ptr(), num_bytes).result()?;
+    sys::hipMalloc(dev_ptr.as_mut_ptr(), num_bytes).result()?;
     Ok(dev_ptr.assume_init())
 }
 
@@ -484,8 +480,8 @@ pub unsafe fn malloc_sync(num_bytes: usize) -> Result<sys::CUdeviceptr, DriverEr
 /// 1. The stream should be an already created stream.
 /// 2. The memory should have been allocated on this stream.
 /// 3. The memory should not have been freed already (double free)
-pub unsafe fn free_async(dptr: sys::CUdeviceptr, stream: sys::CUstream) -> Result<(), DriverError> {
-    sys::cuMemFreeAsync(dptr, stream).result()
+pub unsafe fn free_async(dptr: sys::hipDeviceptr_t, stream: sys::hipStream_t) -> Result<(), DriverError> {
+    sys::hipFreeAsync(dptr, stream).result()
 }
 
 /// Allocates memory
@@ -494,8 +490,8 @@ pub unsafe fn free_async(dptr: sys::CUdeviceptr, stream: sys::CUstream) -> Resul
 ///
 /// # Safety
 /// 1. The memory should have been allocated with malloc_sync
-pub unsafe fn free_sync(dptr: sys::CUdeviceptr) -> Result<(), DriverError> {
-    sys::cuMemFree_v2(dptr).result()
+pub unsafe fn free_sync(dptr: sys::hipDeviceptr_t) -> Result<(), DriverError> {
+    sys::hipFree(dptr).result()
 }
 
 /// Frees device memory.
@@ -505,8 +501,8 @@ pub unsafe fn free_sync(dptr: sys::CUdeviceptr) -> Result<(), DriverError> {
 /// # Safety
 /// 1. Memory must only be freed once.
 /// 2. All async accesses to this pointer must have been completed.
-pub unsafe fn memory_free(device_ptr: sys::CUdeviceptr) -> Result<(), DriverError> {
-    sys::cuMemFree_v2(device_ptr).result()
+pub unsafe fn memory_free(device_ptr: sys::hipDeviceptr_t) -> Result<(), DriverError> {
+    sys::hipFree(device_ptr).result()
 }
 
 /// Sets device memory with stream ordered semantics.
@@ -518,12 +514,12 @@ pub unsafe fn memory_free(device_ptr: sys::CUdeviceptr) -> Result<(), DriverErro
 /// 2. The device pointer should not have been freed already (double free)
 /// 3. The stream should be the stream the memory was allocated on.
 pub unsafe fn memset_d8_async(
-    dptr: sys::CUdeviceptr,
+    dptr: sys::hipDeviceptr_t,
     uc: c_uchar,
     num_bytes: usize,
-    stream: sys::CUstream,
+    stream: sys::hipStream_t,
 ) -> Result<(), DriverError> {
-    sys::cuMemsetD8Async(dptr, uc, num_bytes, stream).result()
+    sys::hipMemsetD8Async(dptr, uc, num_bytes, stream).result()
 }
 
 /// Sets device memory with stream ordered semantics.
@@ -534,11 +530,11 @@ pub unsafe fn memset_d8_async(
 /// 1. The resulting memory pattern may not be valid for `T`.
 /// 2. The device pointer should not have been freed already (double free)
 pub unsafe fn memset_d8_sync(
-    dptr: sys::CUdeviceptr,
+    dptr: sys::hipDeviceptr_t,
     uc: c_uchar,
     num_bytes: usize,
 ) -> Result<(), DriverError> {
-    sys::cuMemsetD8_v2(dptr, uc, num_bytes).result()
+    sys::hipMemsetD8(dptr, uc, num_bytes).result()
 }
 
 /// Copies memory from Host to Device with stream ordered semantics.
@@ -554,13 +550,13 @@ pub unsafe fn memset_d8_sync(
 /// 3. The stream should be the stream the memory was allocated on.
 /// 4. `src` must not be moved
 pub unsafe fn memcpy_htod_async<T>(
-    dst: sys::CUdeviceptr,
+    dst: sys::hipDeviceptr_t,
     src: &[T],
-    stream: sys::CUstream,
+    stream: sys::hipStream_t,
 ) -> Result<(), DriverError> {
-    sys::cuMemcpyHtoDAsync_v2(
+    sys::hipMemcpyHtoDAsync(
         dst,
-        src.as_ptr() as *const _,
+        *(src.as_ptr() as *const _),
         std::mem::size_of_val(src),
         stream,
     )
@@ -576,8 +572,8 @@ pub unsafe fn memcpy_htod_async<T>(
 /// 1. `T` must be the type that device pointer was allocated with.
 /// 2. The device pointer should not have been freed already (double free)
 /// 3. `src` must not be moved
-pub unsafe fn memcpy_htod_sync<T>(dst: sys::CUdeviceptr, src: &[T]) -> Result<(), DriverError> {
-    sys::cuMemcpyHtoD_v2(dst, src.as_ptr() as *const _, std::mem::size_of_val(src)).result()
+pub unsafe fn memcpy_htod_sync<T>(dst: sys::hipDeviceptr_t, src: &[T]) -> Result<(), DriverError> {
+    sys::hipMemcpyHtoD(dst, src.as_ptr() as *mut c_void, std::mem::size_of_val(src)).result()
 }
 
 /// Copies memory from Device to Host with stream ordered semantics.
@@ -593,10 +589,10 @@ pub unsafe fn memcpy_htod_sync<T>(dst: sys::CUdeviceptr, src: &[T]) -> Result<()
 /// 3. The stream should be the stream the memory was allocated on.
 pub unsafe fn memcpy_dtoh_async<T>(
     dst: &mut [T],
-    src: sys::CUdeviceptr,
-    stream: sys::CUstream,
+    src: sys::hipDeviceptr_t,
+    stream: sys::hipStream_t,
 ) -> Result<(), DriverError> {
-    sys::cuMemcpyDtoHAsync_v2(
+    sys::hipMemcpyDtoHAsync(
         dst.as_mut_ptr() as *mut _,
         src,
         std::mem::size_of_val(dst),
@@ -614,8 +610,8 @@ pub unsafe fn memcpy_dtoh_async<T>(
 ///
 /// 1. `T` must be the type that device pointer was allocated with.
 /// 2. The device pointer should not have been freed already (double free)
-pub unsafe fn memcpy_dtoh_sync<T>(dst: &mut [T], src: sys::CUdeviceptr) -> Result<(), DriverError> {
-    sys::cuMemcpyDtoH_v2(dst.as_mut_ptr() as *mut _, src, std::mem::size_of_val(dst)).result()
+pub unsafe fn memcpy_dtoh_sync<T>(dst: &mut [T], src: sys::hipDeviceptr_t) -> Result<(), DriverError> {
+    sys::hipMemcpyDtoH(dst.as_mut_ptr() as *mut _, src, std::mem::size_of_val(dst)).result()
 }
 
 /// Copies memory from Device to Device with stream ordered semantics.
@@ -627,12 +623,12 @@ pub unsafe fn memcpy_dtoh_sync<T>(dst: &mut [T], src: sys::CUdeviceptr) -> Resul
 /// 2. Neither device pointer should not have been freed already (double free)
 /// 3. The stream should be the stream the memory was allocated on.
 pub unsafe fn memcpy_dtod_async(
-    dst: sys::CUdeviceptr,
-    src: sys::CUdeviceptr,
+    dst: sys::hipDeviceptr_t,
+    src: sys::hipDeviceptr_t,
     num_bytes: usize,
-    stream: sys::CUstream,
+    stream: sys::hipStream_t,
 ) -> Result<(), DriverError> {
-    sys::cuMemcpyDtoDAsync_v2(dst, src, num_bytes, stream).result()
+    sys::hipMemcpyDtoDAsync(dst, src, num_bytes, stream).result()
 }
 
 /// Copies memory from Device to Device
@@ -643,11 +639,11 @@ pub unsafe fn memcpy_dtod_async(
 /// 1. `T` must be the type that BOTH device pointers were allocated with.
 /// 2. Neither device pointer should not have been freed already (double free)
 pub unsafe fn memcpy_dtod_sync(
-    dst: sys::CUdeviceptr,
-    src: sys::CUdeviceptr,
+    dst: sys::hipDeviceptr_t,
+    src: sys::hipDeviceptr_t,
     num_bytes: usize,
 ) -> Result<(), DriverError> {
-    sys::cuMemcpyDtoD_v2(dst, src, num_bytes).result()
+    sys::hipMemcpyDtoD(dst, src, num_bytes).result()
 }
 
 /// Returns (free, total) memory in bytes.
@@ -656,7 +652,7 @@ pub unsafe fn memcpy_dtod_sync(
 pub fn mem_get_info() -> Result<(usize, usize), DriverError> {
     let mut free = 0;
     let mut total = 0;
-    unsafe { sys::cuMemGetInfo_v2(&mut free as *mut _, &mut total as *mut _) }.result()?;
+    unsafe { sys::hipMemGetInfo(&mut free as *mut _, &mut total as *mut _) }.result()?;
     Ok((free, total))
 }
 
@@ -673,11 +669,11 @@ pub mod module {
     /// Loads a compute module from a given file.
     ///
     /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html#group__CUDA__MODULE_1g366093bd269dafd0af21f1c7d18115d3)
-    pub fn load(fname: CString) -> Result<sys::CUmodule, DriverError> {
+    pub fn load(fname: CString) -> Result<sys::hipModule_t, DriverError> {
         let fname_ptr = fname.as_c_str().as_ptr();
         let mut module = MaybeUninit::uninit();
         unsafe {
-            sys::cuModuleLoad(module.as_mut_ptr(), fname_ptr).result()?;
+            sys::hipModuleLoad(module.as_mut_ptr(), fname_ptr).result()?;
             Ok(module.assume_init())
         }
     }
@@ -693,9 +689,9 @@ pub mod module {
     ///
     /// # Safety
     /// The image must be properly formed pointer
-    pub unsafe fn load_data(image: *const c_void) -> Result<sys::CUmodule, DriverError> {
+    pub unsafe fn load_data(image: *const c_void) -> Result<sys::hipModule_t, DriverError> {
         let mut module = MaybeUninit::uninit();
-        sys::cuModuleLoadData(module.as_mut_ptr(), image).result()?;
+        sys::hipModuleLoadData(module.as_mut_ptr(), image).result()?;
         Ok(module.assume_init())
     }
 
@@ -706,12 +702,12 @@ pub mod module {
     /// # Safety
     /// `module` must be a properly allocated and not freed module.
     pub unsafe fn get_function(
-        module: sys::CUmodule,
+        module: sys::hipModule_t,
         name: CString,
-    ) -> Result<sys::CUfunction, DriverError> {
+    ) -> Result<sys::hipFunction_t, DriverError> {
         let name_ptr = name.as_c_str().as_ptr();
         let mut func = MaybeUninit::uninit();
-        sys::cuModuleGetFunction(func.as_mut_ptr(), module, name_ptr).result()?;
+        sys::hipModuleGetFunction(func.as_mut_ptr(), module, name_ptr).result()?;
         Ok(func.assume_init())
     }
 
@@ -721,8 +717,8 @@ pub mod module {
     ///
     /// # Safety
     /// `module` must not have be unloaded already.
-    pub unsafe fn unload(module: sys::CUmodule) -> Result<(), DriverError> {
-        sys::cuModuleUnload(module).result()
+    pub unsafe fn unload(module: sys::hipModule_t) -> Result<(), DriverError> {
+        sys::hipModuleUnload(module).result()
     }
 }
 
@@ -733,10 +729,10 @@ pub mod event {
     /// Creates an event.
     ///
     /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html#group__CUDA__EVENT_1g450687e75f3ff992fe01662a43d9d3db)
-    pub fn create(flags: sys::CUevent_flags) -> Result<sys::CUevent, DriverError> {
+    pub fn create(flags: ::core::ffi::c_uint) -> Result<sys::hipEvent_t, DriverError> {
         let mut event = MaybeUninit::uninit();
         unsafe {
-            sys::cuEventCreate(event.as_mut_ptr(), flags as u32).result()?;
+            sys::hipEventCreateWithFlags(event.as_mut_ptr(), flags as u32).result()?;
             Ok(event.assume_init())
         }
     }
@@ -747,8 +743,8 @@ pub mod event {
     ///
     /// # Safety
     /// This function is unsafe because event can be a null event, in which case
-    pub unsafe fn record(event: sys::CUevent, stream: sys::CUstream) -> Result<(), DriverError> {
-        unsafe { sys::cuEventRecord(event, stream).result() }
+    pub unsafe fn record(event: sys::hipEvent_t, stream: sys::hipStream_t) -> Result<(), DriverError> {
+        unsafe { sys::hipEventRecord(event, stream).result() }
     }
 
     /// Computes the elapsed time (in milliseconds) between two events.
@@ -758,10 +754,10 @@ pub mod event {
     /// 1. Events must have been created by [create]
     /// 2. They should be on the same stream
     /// 3. They must not have been destroyed.
-    pub unsafe fn elapsed(start: sys::CUevent, end: sys::CUevent) -> Result<f32, DriverError> {
+    pub unsafe fn elapsed(start: sys::hipEvent_t, end: sys::hipEvent_t) -> Result<f32, DriverError> {
         let mut ms: f32 = 0.0;
         unsafe {
-            sys::cuEventElapsedTime((&mut ms) as *mut _, start, end).result()?;
+            sys::hipEventElapsedTime((&mut ms) as *mut _, start, end).result()?;
         }
         Ok(ms)
     }
@@ -776,8 +772,8 @@ pub mod event {
     ///
     /// # Safety
     /// 1. Event must not have been freed already
-    pub unsafe fn destroy(event: sys::CUevent) -> Result<(), DriverError> {
-        sys::cuEventDestroy_v2(event).result()
+    pub unsafe fn destroy(event: sys::hipEvent_t) -> Result<(), DriverError> {
+        sys::hipEventDestroy(event).result()
     }
 }
 
@@ -796,14 +792,14 @@ pub mod event {
 /// can change at a later point after callign this function. *Even non-mutable references*.
 #[inline]
 pub unsafe fn launch_kernel(
-    f: sys::CUfunction,
+    f: sys::hipFunction_t,
     grid_dim: (c_uint, c_uint, c_uint),
     block_dim: (c_uint, c_uint, c_uint),
     shared_mem_bytes: c_uint,
-    stream: sys::CUstream,
+    stream: sys::hipStream_t,
     kernel_params: &mut [*mut c_void],
 ) -> Result<(), DriverError> {
-    sys::cuLaunchKernel(
+    sys::hipModuleLaunchKernel(
         f,
         grid_dim.0,
         grid_dim.1,
@@ -836,15 +832,15 @@ pub mod external_memory {
     pub unsafe fn import_external_memory_opaque_fd(
         fd: std::os::fd::RawFd,
         size: u64,
-    ) -> Result<sys::CUexternalMemory, DriverError> {
+    ) -> Result<sys::hipExternalMemory_t, DriverError> {
         let mut external_memory = MaybeUninit::uninit();
-        let handle_description = sys::CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
-            type_: sys::CUexternalMemoryHandleType::CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD,
-            handle: sys::CUDA_EXTERNAL_MEMORY_HANDLE_DESC_st__bindgen_ty_1 { fd },
+        let handle_description = sys::hipExternalMemoryHandleDesc_st {
+            type_: sys::hipExternalMemoryHandleType_enum::hipExternalMemoryHandleTypeOpaqueFd,
+            handle: sys::hipExternalMemoryHandleDesc_st__bindgen_ty_1 { fd },
             size,
             ..Default::default()
         };
-        sys::cuImportExternalMemory(external_memory.as_mut_ptr(), &handle_description).result()?;
+        sys::hipImportExternalMemory(external_memory.as_mut_ptr(), &handle_description).result()?;
         Ok(external_memory.assume_init())
     }
 
@@ -885,9 +881,9 @@ pub mod external_memory {
     /// 1. Any mapped buffers onto this object must already be freed.
     /// 2. The external memory must only be destroyed once.
     pub unsafe fn destroy_external_memory(
-        external_memory: sys::CUexternalMemory,
+        external_memory: sys::hipExternalMemory_t,
     ) -> Result<(), DriverError> {
-        sys::cuDestroyExternalMemory(external_memory).result()
+        sys::hipDestroyExternalMemory(external_memory).result()
     }
 
     /// Maps a buffer onto an imported memory object.
@@ -899,17 +895,17 @@ pub mod external_memory {
     /// # Safety
     /// Mapped buffers may overlap.
     pub unsafe fn get_mapped_buffer(
-        external_memory: sys::CUexternalMemory,
+        external_memory: sys::hipExternalMemory_t,
         offset: u64,
         size: u64,
-    ) -> Result<sys::CUdeviceptr, DriverError> {
+    ) -> Result<sys::hipDeviceptr_t, DriverError> {
         let mut device_ptr = MaybeUninit::uninit();
-        let buffer_description = sys::CUDA_EXTERNAL_MEMORY_BUFFER_DESC {
+        let buffer_description = sys::hipExternalMemoryBufferDesc_st {
             offset,
             size,
             ..Default::default()
         };
-        sys::cuExternalMemoryGetMappedBuffer(
+        sys::hipExternalMemoryGetMappedBuffer(
             device_ptr.as_mut_ptr(),
             external_memory,
             &buffer_description,

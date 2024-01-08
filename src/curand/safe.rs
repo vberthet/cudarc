@@ -26,7 +26,7 @@ use std::sync::Arc;
 /// 2. Normal - [CudaRng::fill_with_normal()]
 /// 3. LogNormal - [CudaRng::fill_with_log_normal()]
 pub struct CudaRng {
-    pub(crate) gen: sys::curandGenerator_t,
+    pub(crate) gen: sys::hiprandGenerator_t,
     pub(crate) device: Arc<CudaDevice>,
 }
 
@@ -53,7 +53,7 @@ impl CudaRng {
     /// Fill the [CudaSlice] with data from a `Uniform` distribution
     pub fn fill_with_uniform<T>(&self, t: &mut CudaSlice<T>) -> Result<(), result::CurandError>
     where
-        sys::curandGenerator_t: result::UniformFill<T>,
+        sys::hiprandGenerator_t: result::UniformFill<T>,
     {
         unsafe { result::UniformFill::fill(self.gen, t.cu_device_ptr as *mut T, t.len()) }
     }
@@ -66,7 +66,7 @@ impl CudaRng {
         std: T,
     ) -> Result<(), result::CurandError>
     where
-        sys::curandGenerator_t: result::NormalFill<T>,
+        sys::hiprandGenerator_t: result::NormalFill<T>,
     {
         unsafe { result::NormalFill::fill(self.gen, t.cu_device_ptr as *mut T, t.len(), mean, std) }
     }
@@ -79,7 +79,7 @@ impl CudaRng {
         std: T,
     ) -> Result<(), result::CurandError>
     where
-        sys::curandGenerator_t: result::LogNormalFill<T>,
+        sys::hiprandGenerator_t: result::LogNormalFill<T>,
     {
         unsafe {
             result::LogNormalFill::fill(self.gen, t.cu_device_ptr as *mut T, t.len(), mean, std)
@@ -112,7 +112,7 @@ mod tests {
         n: usize,
     ) -> Vec<T>
     where
-        super::sys::curandGenerator_t: UniformFill<T>,
+        super::sys::hiprandGenerator_t: UniformFill<T>,
     {
         let dev = CudaDevice::new(0).unwrap();
         let mut a_dev = dev.alloc_zeros::<T>(n).unwrap();
@@ -128,7 +128,7 @@ mod tests {
         std: T,
     ) -> Vec<T>
     where
-        super::sys::curandGenerator_t: NormalFill<T>,
+        super::sys::hiprandGenerator_t: NormalFill<T>,
     {
         let dev = CudaDevice::new(0).unwrap();
         let mut a_dev = dev.alloc_zeros::<T>(n).unwrap();
@@ -144,7 +144,7 @@ mod tests {
         std: T,
     ) -> Vec<T>
     where
-        super::sys::curandGenerator_t: LogNormalFill<T>,
+        super::sys::hiprandGenerator_t: LogNormalFill<T>,
     {
         let dev = CudaDevice::new(0).unwrap();
         let mut a_dev = dev.alloc_zeros::<T>(n).unwrap();

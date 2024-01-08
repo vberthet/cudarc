@@ -2,7 +2,7 @@
 
 use super::{result, result::CublasError, sys};
 use crate::cublaslt::result::set_matrix_layout_attribute;
-use crate::driver::sys::{CUdevice_attribute, CUdeviceptr, CUstream};
+use crate::driver::sys::{hipDeviceAttribute_t, hipDeviceptr_t, hipStream_t};
 use crate::driver::{CudaDevice, CudaSlice, DevicePtr, DevicePtrMut, DriverError};
 use core::ffi::c_int;
 use core::mem;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 /// from being dropped. Kernels will be launched on the device device default stream.
 #[derive(Debug)]
 pub struct CudaBlasLT {
-    handle: sys::cublasLtHandle_t,
+    handle: sys::hipblasLtHandle_t,
     workspace: Workspace,
     device: Arc<CudaDevice>,
 }
@@ -67,7 +67,7 @@ impl Workspace {
         device.bind_to_thread()?;
 
         let major =
-            device.attribute(CUdevice_attribute::CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR)?;
+            device.attribute(hipDeviceAttribute_t::hipDeviceAttributeComputeCapabilityMajor)?;
         let workspace_size = if major >= 9 { 33_554_432 } else { 4_194_304 };
 
         let buffer = unsafe { device.alloc::<u8>(workspace_size)? };
@@ -87,12 +87,12 @@ pub enum Activation {
 
 /// MatrixLayout helper type
 struct MatrixLayout {
-    handle: sys::cublasLtMatrixLayout_t,
+    handle: sys::hipblasLtMatrixLayout_t,
 }
 
 impl MatrixLayout {
     fn new(
-        matrix_type: sys::cudaDataType,
+        matrix_type: sys::hipDataType,
         rows: u64,
         cols: u64,
         ld: i64,
@@ -106,14 +106,14 @@ impl MatrixLayout {
             // Set batch size
             set_matrix_layout_attribute(
                 self.handle,
-                sys::cublasLtMatrixLayoutAttribute_t::CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
+                sys::hipblasLtMatrixLayoutAttribute_t::HIPBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
                 (&size) as *const _ as *const _,
                 mem::size_of::<c_int>(),
             )?;
             // Set batch stride
             set_matrix_layout_attribute(
                 self.handle,
-                sys::cublasLtMatrixLayoutAttribute_t::CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
+                sys::hipblasLtMatrixLayoutAttribute_t::HIPBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
                 (&stride) as *const _ as *const _,
                 mem::size_of::<i64>(),
             )?;
@@ -134,19 +134,19 @@ impl Drop for MatrixLayout {
 enum Matrix {
     A,
     B,
-    #[allow(dead_code)]
-    C,
+    // #[allow(dead_code)]
+    // C,
 }
 
 /// MatmulDesc helper type
 struct MatmulDesc {
-    handle: sys::cublasLtMatmulDesc_t,
+    handle: sys::hipblasLtMatmulDesc_t,
 }
 
 impl MatmulDesc {
     fn new(
-        compute_type: sys::cublasComputeType_t,
-        scale_type: sys::cudaDataType,
+        compute_type: sys::hipblasComputeType_t,
+        scale_type: sys::hipDataType,
     ) -> Result<Self, CublasError> {
         let handle = result::create_matmul_desc(compute_type, scale_type)?;
         Ok(Self { handle })
@@ -157,9 +157,9 @@ impl MatmulDesc {
         // 1 == T, 0 == N
         let transpose = transpose as i32;
         let attr = match matrix {
-            Matrix::A => sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_TRANSA,
-            Matrix::B => sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_TRANSB,
-            Matrix::C => sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_TRANSC,
+            Matrix::A => sys::hipblasLtMatmulDescAttributes_t::HIPBLASLT_MATMUL_DESC_TRANSA,
+            Matrix::B => sys::hipblasLtMatmulDescAttributes_t::HIPBLASLT_MATMUL_DESC_TRANSB,
+            // Matrix::C => sys::hipblasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_TRANSC,
         };
 
         unsafe {
@@ -177,59 +177,62 @@ impl MatmulDesc {
     fn set_epilogue(
         &self,
         act: Option<&Activation>,
-        bias_ptr: Option<&CUdeviceptr>,
+        bias_ptr: Option<&hipDeviceptr_t>,
         stride_bias: Option<i64>,
     ) -> Result<(), CublasError> {
         let epilogue = if let Some(bias_ptr) = bias_ptr {
             let epilogue = act
                 .map(|act| match act {
                     // Act + bias
-                    Activation::Relu => sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_RELU_BIAS,
-                    Activation::Gelu => sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_GELU_BIAS,
+                    Activation::Relu => sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_RELU_BIAS,
+                    Activation::Gelu => sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_GELU_BIAS,
                 })
                 // Only bias
-                .unwrap_or(sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_BIAS);
+                .unwrap_or(sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_BIAS);
 
             // Set bias CUdeviceptr in matmul_desc
             unsafe {
                 result::set_matmul_desc_attribute(
                     self.handle,
-                    sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_BIAS_POINTER,
-                    bias_ptr as *const CUdeviceptr as *const _,
-                    mem::size_of::<CUdeviceptr>(),
+                    sys::hipblasLtMatmulDescAttributes_t::HIPBLASLT_MATMUL_DESC_BIAS_POINTER,
+                    bias_ptr as *const hipDeviceptr_t as *const _,
+                    mem::size_of::<hipDeviceptr_t>(),
                 )?;
             }
 
             if let Some(stride_bias) = stride_bias {
                 // Set bias batch stride
+                // FIXME
+                todo!();
+                /*
                 unsafe {
                     result::set_matmul_desc_attribute(
                         self.handle,
-                        sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE,
+                        sys::hipblasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_BIAS_BATCH_STRIDE,
                         (&stride_bias) as *const _ as *const _,
                         mem::size_of::<i64>(),
                     )?;
-                }
+                }*/
             }
             epilogue
         } else if let Some(act) = act {
             // Only Act
             match act {
-                Activation::Relu => sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_RELU,
-                Activation::Gelu => sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_GELU,
+                Activation::Relu => sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_RELU,
+                Activation::Gelu => sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_GELU,
             }
         } else {
             // No epilogue
-            sys::cublasLtEpilogue_t::CUBLASLT_EPILOGUE_DEFAULT
+            sys::hipblasLtEpilogue_t::HIPBLASLT_EPILOGUE_DEFAULT
         };
 
         // Set epilogue
         unsafe {
             result::set_matmul_desc_attribute(
                 self.handle,
-                sys::cublasLtMatmulDescAttributes_t::CUBLASLT_MATMUL_DESC_EPILOGUE,
+                sys::hipblasLtMatmulDescAttributes_t::HIPBLASLT_MATMUL_DESC_EPILOGUE,
                 (&epilogue) as *const _ as *const _,
-                mem::size_of::<sys::cublasLtMatmulDescAttributes_t>(),
+                mem::size_of::<sys::hipblasLtMatmulDescAttributes_t>(),
             )?;
         }
         Ok(())
@@ -244,7 +247,7 @@ impl Drop for MatmulDesc {
 
 /// MatmulPref helper type
 struct MatmulPref {
-    handle: sys::cublasLtMatmulPreference_t,
+    handle: sys::hipblasLtMatmulPreference_t,
 }
 
 impl MatmulPref {
@@ -258,7 +261,7 @@ impl MatmulPref {
             // Set workspace size
             result::set_matmul_pref_attribute(
                 self.handle,
-                sys::cublasLtMatmulPreferenceAttributes_t::CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
+                sys::hipblasLtMatmulPreferenceAttributes_t::HIPBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
                 (&size) as *const _ as *const _,
                 mem::size_of::<usize>(),
             )?;
@@ -276,13 +279,13 @@ impl Drop for MatmulPref {
 /// [Matmul] super-trait
 pub trait MatmulShared {
     /// Returns a reference to the underlying cublasLt handle.
-    fn handle(&self) -> &sys::cublasLtHandle_t;
+    fn handle(&self) -> &sys::hipblasLtHandle_t;
 
     /// Returns a reference to the underlying cublasLt workspace
     fn workspace(&self) -> &Workspace;
 
     /// Returns a reference to the underlying stream
-    fn stream(&self) -> &CUstream;
+    fn stream(&self) -> &hipStream_t;
 }
 
 /// Configuration for [Matmul]
@@ -308,10 +311,10 @@ pub struct MatmulConfig {
 /// Matrix matrix multiplication with elements of type `T`.
 pub trait Matmul<T>: MatmulShared {
     /// Underlying CUDA Type for `T`
-    fn matrix_type() -> sys::cudaDataType;
+    fn matrix_type() -> sys::hipDataType;
 
     /// Underlying CUDA Compute Type for `T`
-    fn compute_type() -> sys::cublasComputeType_t;
+    fn compute_type() -> sys::hipblasComputeType_t;
 
     /// Matrix matrix multiplication. See
     /// [nvidia docs](https://docs.nvidia.com/cuda/cublas/index.html#cublasltmatmul)
@@ -356,7 +359,7 @@ pub trait Matmul<T>: MatmulShared {
         }
 
         // Matmul description
-        let matmul_desc = MatmulDesc::new(Self::compute_type(), sys::cudaDataType_t::CUDA_R_32F)?;
+        let matmul_desc = MatmulDesc::new(Self::compute_type(), sys::hipDataType::HIP_R_32F)?;
 
         // Set transa
         matmul_desc.set_transpose(cfg.transa, Matrix::A)?;
@@ -398,7 +401,7 @@ pub trait Matmul<T>: MatmulShared {
             *c.device_ptr_mut() as *mut _,
             c_layout.handle,
             (&heuristic.algo) as *const _,
-            *self.workspace().buffer.device_ptr() as *const CUdeviceptr as *mut _,
+            *self.workspace().buffer.device_ptr() as *const hipDeviceptr_t as *mut _,
             self.workspace().size,
             *self.stream() as *mut _,
         )
@@ -406,7 +409,7 @@ pub trait Matmul<T>: MatmulShared {
 }
 
 impl MatmulShared for CudaBlasLT {
-    fn handle(&self) -> &sys::cublasLtHandle_t {
+    fn handle(&self) -> &sys::hipblasLtHandle_t {
         &self.handle
     }
 
@@ -414,40 +417,40 @@ impl MatmulShared for CudaBlasLT {
         &self.workspace
     }
 
-    fn stream(&self) -> &CUstream {
+    fn stream(&self) -> &hipStream_t {
         &self.device.stream
     }
 }
 
 impl Matmul<f32> for CudaBlasLT {
-    fn matrix_type() -> sys::cudaDataType {
-        sys::cudaDataType_t::CUDA_R_32F
+    fn matrix_type() -> sys::hipDataType {
+        sys::hipDataType::HIP_R_32F
     }
 
-    fn compute_type() -> sys::cublasComputeType_t {
-        sys::cublasComputeType_t::CUBLAS_COMPUTE_32F_FAST_TF32
+    fn compute_type() -> sys::hipblasComputeType_t {
+        sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F_FAST_TF32
     }
 }
 
 #[cfg(feature = "f16")]
 impl Matmul<half::f16> for CudaBlasLT {
-    fn matrix_type() -> sys::cudaDataType {
-        sys::cudaDataType_t::CUDA_R_16F
+    fn matrix_type() -> sys::hipDataType {
+        sys::hipDataType::HIP_R_16F
     }
 
-    fn compute_type() -> sys::cublasComputeType_t {
-        sys::cublasComputeType_t::CUBLAS_COMPUTE_32F
+    fn compute_type() -> sys::hipblasComputeType_t {
+        sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F
     }
 }
 
 #[cfg(feature = "f16")]
 impl Matmul<half::bf16> for CudaBlasLT {
-    fn matrix_type() -> sys::cudaDataType {
-        sys::cudaDataType_t::CUDA_R_16BF
+    fn matrix_type() -> sys::hipDataType {
+        sys::hipDataType::HIP_R_16BF
     }
 
-    fn compute_type() -> sys::cublasComputeType_t {
-        sys::cublasComputeType_t::CUBLAS_COMPUTE_32F
+    fn compute_type() -> sys::hipblasComputeType_t {
+        sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F
     }
 }
 
@@ -484,12 +487,12 @@ mod tests {
     #[test]
     fn test_matmul_f32() {
         let logpath = CString::new("log_matmul_f32").unwrap();
-        unsafe { sys::cublasLtLoggerSetLevel(4).result().unwrap() };
-        unsafe {
-            sys::cublasLtLoggerOpenFile(logpath.as_ptr())
-                .result()
-                .unwrap()
-        };
+        // unsafe { sys::hipblasLtLoggerSetLevel(4).result().unwrap() };
+        // unsafe {
+        //     sys::hipblasLtLoggerOpenFile(logpath.as_ptr())
+        //         .result()
+        //         .unwrap()
+        // };
 
         let dev = CudaDevice::new(0).unwrap();
         let blas = CudaBlasLT::new(dev.clone()).unwrap();
@@ -572,12 +575,12 @@ mod tests {
     #[test]
     fn test_matmul_half() {
         let logpath = CString::new("log_matmul_half").unwrap();
-        unsafe { sys::cublasLtLoggerSetLevel(4).result().unwrap() };
-        unsafe {
-            sys::cublasLtLoggerOpenFile(logpath.as_ptr())
-                .result()
-                .unwrap()
-        };
+        // unsafe { sys::hipblasLtLoggerSetLevel(4).result().unwrap() };
+        // unsafe {
+        //     sys::hipblasLtLoggerOpenFile(logpath.as_ptr())
+        //         .result()
+        //         .unwrap()
+        // };
 
         let dev = CudaDevice::new(0).unwrap();
         let blas = CudaBlasLT::new(dev.clone()).unwrap();

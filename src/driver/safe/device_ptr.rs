@@ -32,40 +32,40 @@ impl<'a, T> DeviceSlice<T> for CudaViewMut<'a, T> {
 
 /// Abstraction over [CudaSlice]/[CudaView]
 pub trait DevicePtr<T>: DeviceSlice<T> {
-    fn device_ptr(&self) -> &sys::CUdeviceptr;
+    fn device_ptr(&self) -> &sys::hipDeviceptr_t;
 }
 
 impl<T> DevicePtr<T> for CudaSlice<T> {
-    fn device_ptr(&self) -> &sys::CUdeviceptr {
+    fn device_ptr(&self) -> &sys::hipDeviceptr_t {
         &self.cu_device_ptr
     }
 }
 
 impl<'a, T> DevicePtr<T> for CudaView<'a, T> {
-    fn device_ptr(&self) -> &sys::CUdeviceptr {
+    fn device_ptr(&self) -> &sys::hipDeviceptr_t {
         &self.ptr
     }
 }
 
 impl<'a, T> DevicePtr<T> for CudaViewMut<'a, T> {
-    fn device_ptr(&self) -> &sys::CUdeviceptr {
+    fn device_ptr(&self) -> &sys::hipDeviceptr_t {
         &self.ptr
     }
 }
 
 /// Abstraction over [CudaSlice]/[CudaViewMut]
 pub trait DevicePtrMut<T>: DeviceSlice<T> {
-    fn device_ptr_mut(&mut self) -> &mut sys::CUdeviceptr;
+    fn device_ptr_mut(&mut self) -> &mut sys::hipDeviceptr_t;
 }
 
 impl<T> DevicePtrMut<T> for CudaSlice<T> {
-    fn device_ptr_mut(&mut self) -> &mut sys::CUdeviceptr {
+    fn device_ptr_mut(&mut self) -> &mut sys::hipDeviceptr_t {
         &mut self.cu_device_ptr
     }
 }
 
 impl<'a, T> DevicePtrMut<T> for CudaViewMut<'a, T> {
-    fn device_ptr_mut(&mut self) -> &mut sys::CUdeviceptr {
+    fn device_ptr_mut(&mut self) -> &mut sys::hipDeviceptr_t {
         &mut self.ptr
     }
 }

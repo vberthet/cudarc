@@ -4,11 +4,11 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     #[cfg(not(feature = "ci-check"))]
-    link_cuda();
+    link_hip();
 }
 
 #[allow(unused)]
-fn link_cuda() {
+fn link_hip() {
     println!("cargo:rerun-if-env-changed=CUDA_ROOT");
     println!("cargo:rerun-if-env-changed=CUDA_PATH");
     println!("cargo:rerun-if-env-changed=CUDA_TOOLKIT_ROOT_DIR");
@@ -16,74 +16,31 @@ fn link_cuda() {
     let candidates: Vec<PathBuf> = root_candidates().collect();
 
     let toolkit_root = root_candidates()
-        .find(|path| path.join("include").join("cuda.h").is_file())
+        .find(|path| path.join("include").join("hip").is_dir())
         .unwrap_or_else(|| {
             panic!(
-                "Unable to find `include/cuda.h` under any of: {:?}. Set the `CUDA_ROOT` environment variable to `$CUDA_ROOT/include/cuda.h` to override path.",
+                "Unable to find `include/hip` under any of: {:?}. Set the `CUDA_ROOT` environment variable to `$CUDA_ROOT/include/cuda.h` to override path.",
                 candidates
             )
         });
 
     for path in lib_candidates(&toolkit_root) {
-        println!("cargo:rustc-link-search=native={}", path.display());
+        println!("cargo:rustc-link-search={}", path.display());
     }
 
-    #[cfg(feature = "driver")]
-    println!("cargo:rustc-link-lib=dylib=cuda");
+
+    println!("cargo:rustc-link-lib=dylib=amdhip64");
+    #[cfg(feature = "cublas")]
+    println!("cargo:rustc-link-lib=dylib=hipblas");
+
+    #[cfg(feature = "cublaslt")]
+    println!("cargo:rustc-link-lib=dylib=hipblaslt");
+
+    #[cfg(feature = "curand")]
+    println!("cargo:rustc-link-lib=dylib=hiprand");
+
     #[cfg(feature = "nccl")]
-    println!("cargo:rustc-link-lib=dylib=nccl");
-
-    #[cfg(feature = "static-linking")]
-    {
-        println!("cargo:rustc-link-lib=dylib=stdc++");
-        #[cfg(any(feature = "cublas", feature = "cublaslt"))]
-        {
-            println!("cargo:rustc-link-lib=dylib=cudart");
-            println!("cargo:rustc-link-lib=static=cublasLt_static");
-        }
-        #[cfg(feature = "cublas")]
-        println!("cargo:rustc-link-lib=static=cublas_static");
-        #[cfg(feature = "curand")]
-        {
-            println!("cargo:rustc-link-lib=dylib=culibos");
-            println!("cargo:rustc-link-lib=static=curand_static");
-        }
-        #[cfg(feature = "nvrtc")]
-        {
-            println!("cargo:rustc-link-lib=static=nvrtc_static");
-            println!("cargo:rustc-link-lib=static=nvptxcompiler_static");
-            println!("cargo:rustc-link-lib=static=nvrtc-builtins_static");
-        }
-    }
-    #[cfg(not(feature = "static-linking"))]
-    {
-        #[cfg(feature = "nvrtc")]
-        println!("cargo:rustc-link-lib=dylib=nvrtc");
-        #[cfg(feature = "curand")]
-        println!("cargo:rustc-link-lib=dylib=curand");
-        #[cfg(feature = "cublas")]
-        println!("cargo:rustc-link-lib=dylib=cublas");
-        #[cfg(any(feature = "cublas", feature = "cublaslt"))]
-        println!("cargo:rustc-link-lib=dylib=cublasLt");
-    }
-
-    #[cfg(feature = "cudnn")]
-    {
-        let cudnn_root = root_candidates()
-            .find(|path| path.join("include").join("cudnn.h").is_file())
-            .unwrap_or_else(|| {
-                panic!(
-                    "Unable to find `include/cudnn.h` under any of: {:?}. Set the `CUDNN_LIB` environment variable to `$CUDNN_LIB/include/cudnn.h` to override path.",
-                    candidates
-                )
-            });
-
-        for path in lib_candidates(&cudnn_root) {
-            println!("cargo:rustc-link-search=native={}", path.display());
-        }
-    }
-    #[cfg(feature = "cudnn")]
-    println!("cargo:rustc-link-lib=dylib=cudnn");
+    println!("cargo:rustc-link-lib=dylib=rccl");
 }
 
 fn root_candidates() -> impl Iterator<Item = PathBuf> {
@@ -100,11 +57,11 @@ fn root_candidates() -> impl Iterator<Item = PathBuf> {
 
     let roots = [
         "/usr",
-        "/usr/local/cuda",
-        "/opt/cuda",
-        "/usr/lib/cuda",
-        "C:/Program Files/NVIDIA GPU Computing Toolkit",
-        "C:/CUDA",
+        "/usr/local/rocm",
+        "/opt/rocm",
+        "/usr/lib/rocm",
+        // "C:/Program Files/NVIDIA GPU Computing Toolkit", #TODO Fix windows
+        // "C:/CUDA", #TODO Fix windows
     ];
     let roots = roots.into_iter().map(Into::into);
     env_vars.chain(roots).map(Into::<PathBuf>::into)

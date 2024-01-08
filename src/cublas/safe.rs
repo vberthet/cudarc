@@ -6,7 +6,7 @@ use crate::driver::{CudaDevice, CudaStream, DevicePtr, DevicePtrMut};
 use core::ffi::{c_int, c_longlong};
 use std::sync::Arc;
 
-/// Wrapper around [sys::cublasHandle_t]
+/// Wrapper around [sys::hipblasHandle_t]
 ///
 /// 1. Create with [CudaBlas::new()]
 /// 2. Execute gemm/gemv kernels with [Gemv] and [Gemm]. Both f32 and f64 are supported
@@ -16,7 +16,7 @@ use std::sync::Arc;
 /// from being dropped.
 #[derive(Debug)]
 pub struct CudaBlas {
-    pub(crate) handle: sys::cublasHandle_t,
+    pub(crate) handle: sys::hipblasHandle_t,
     pub(crate) device: Arc<CudaDevice>,
 }
 
@@ -34,7 +34,7 @@ impl CudaBlas {
     }
 
     /// Returns a reference to the underlying cublas handle.
-    pub fn handle(&self) -> &sys::cublasHandle_t {
+    pub fn handle(&self) -> &sys::hipblasHandle_t {
         &self.handle
     }
 
@@ -64,7 +64,7 @@ impl Drop for CudaBlas {
 /// Configuration for [Gemv]
 #[derive(Debug, Copy, Clone)]
 pub struct GemvConfig<T> {
-    pub trans: sys::cublasOperation_t,
+    pub trans: sys::hipblasOperation_t,
     pub m: c_int,
     pub n: c_int,
     pub alpha: T,
@@ -143,8 +143,8 @@ impl Gemv<f64> for CudaBlas {
 /// Configuration for [Gemm]
 #[derive(Debug, Copy, Clone)]
 pub struct GemmConfig<T> {
-    pub transa: sys::cublasOperation_t,
-    pub transb: sys::cublasOperation_t,
+    pub transa: sys::hipblasOperation_t,
+    pub transb: sys::hipblasOperation_t,
     pub m: c_int,
     pub n: c_int,
     pub k: c_int,
@@ -216,17 +216,17 @@ impl Gemm<half::f16> for CudaBlas {
             cfg.k,
             (&alpha) as *const f32 as *const _,
             *a.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.lda,
             *b.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.ldb,
             (&beta) as *const f32 as *const _,
             *c.device_ptr_mut() as *mut _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.ldc,
-            sys::cublasComputeType_t::CUBLAS_COMPUTE_32F,
-            sys::cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+            sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F,
+            sys::hipblasGemmAlgo_t::HIPBLAS_GEMM_DEFAULT,
         )
     }
     unsafe fn gemm_strided_batched<
@@ -251,21 +251,21 @@ impl Gemm<half::f16> for CudaBlas {
             cfg.gemm.k,
             (&alpha) as *const f32 as *const _,
             *a.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.gemm.lda,
             cfg.stride_a,
             *b.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.gemm.ldb,
             cfg.stride_b,
             (&beta) as *const f32 as *const _,
             *c.device_ptr_mut() as *mut _,
-            sys::cudaDataType_t::CUDA_R_16F,
+            sys::hipDataType::HIP_R_16F,
             cfg.gemm.ldc,
             cfg.stride_c,
             cfg.batch_size,
-            sys::cublasComputeType_t::CUBLAS_COMPUTE_32F,
-            sys::cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+            sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F,
+            sys::hipblasGemmAlgo_t::HIPBLAS_GEMM_DEFAULT,
         )
     }
 }
@@ -294,17 +294,17 @@ impl Gemm<half::bf16> for CudaBlas {
             cfg.k,
             (&alpha) as *const f32 as *const _,
             *a.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.lda,
             *b.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.ldb,
             (&beta) as *const f32 as *const _,
             *c.device_ptr_mut() as *mut _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.ldc,
-            sys::cublasComputeType_t::CUBLAS_COMPUTE_32F,
-            sys::cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+            sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F,
+            sys::hipblasGemmAlgo_t::HIPBLAS_GEMM_DEFAULT,
         )
     }
     unsafe fn gemm_strided_batched<
@@ -329,21 +329,21 @@ impl Gemm<half::bf16> for CudaBlas {
             cfg.gemm.k,
             (&alpha) as *const f32 as *const _,
             *a.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.gemm.lda,
             cfg.stride_a,
             *b.device_ptr() as *const _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.gemm.ldb,
             cfg.stride_b,
             (&beta) as *const f32 as *const _,
             *c.device_ptr_mut() as *mut _,
-            sys::cudaDataType_t::CUDA_R_16BF,
+            sys::hipDataType::HIP_R_16BF,
             cfg.gemm.ldc,
             cfg.stride_c,
             cfg.batch_size,
-            sys::cublasComputeType_t::CUBLAS_COMPUTE_32F,
-            sys::cublasGemmAlgo_t::CUBLAS_GEMM_DEFAULT,
+            sys::hipblasComputeType_t::HIPBLAS_COMPUTE_32F,
+            sys::hipblasGemmAlgo_t::HIPBLAS_GEMM_DEFAULT,
         )
     }
 }
@@ -464,6 +464,7 @@ impl Gemm<f64> for CudaBlas {
 mod tests {
     #![allow(clippy::needless_range_loop)]
 
+    use std::println;
     use super::*;
 
     fn gemv_truth<T, const M: usize, const N: usize>(
@@ -533,7 +534,7 @@ mod tests {
         unsafe {
             blas.gemv(
                 GemvConfig {
-                    trans: sys::cublasOperation_t::CUBLAS_OP_T,
+                    trans: sys::hipblasOperation_t::HIPBLAS_OP_T,
                     m: N as i32,
                     n: M as i32,
                     alpha: 1.0,
@@ -589,10 +590,10 @@ mod tests {
         ]).unwrap();
         let b_dev = dev.htod_sync_copy(&b).unwrap();
         let mut c_dev = dev.alloc_zeros(M).unwrap();
-        unsafe {
+        if let Err(e) = unsafe {
             blas.gemv(
                 GemvConfig {
-                    trans: sys::cublasOperation_t::CUBLAS_OP_T,
+                    trans: sys::hipblasOperation_t::HIPBLAS_OP_T,
                     m: N as i32,
                     n: M as i32,
                     alpha: 1.0,
@@ -605,8 +606,10 @@ mod tests {
                 &b_dev,
                 &mut c_dev,
             )
+        } {
+            println!("{:?}", e);
+            panic!();
         }
-        .unwrap();
 
         let c_host = dev.sync_reclaim(c_dev).unwrap();
         for i in 0..M {
@@ -661,8 +664,8 @@ mod tests {
         unsafe {
             blas.gemm(
                 GemmConfig {
-                    transa: sys::cublasOperation_t::CUBLAS_OP_N,
-                    transb: sys::cublasOperation_t::CUBLAS_OP_N,
+                    transa: sys::hipblasOperation_t::HIPBLAS_OP_N,
+                    transb: sys::hipblasOperation_t::HIPBLAS_OP_N,
                     m: N as i32,
                     n: M as i32,
                     k: K as i32,
@@ -708,8 +711,8 @@ mod tests {
         unsafe {
             blas.gemm(
                 GemmConfig {
-                    transa: sys::cublasOperation_t::CUBLAS_OP_N,
-                    transb: sys::cublasOperation_t::CUBLAS_OP_N,
+                    transa: sys::hipblasOperation_t::HIPBLAS_OP_N,
+                    transb: sys::hipblasOperation_t::HIPBLAS_OP_N,
                     m: N as i32,
                     n: M as i32,
                     k: K as i32,
@@ -776,8 +779,8 @@ mod tests {
         unsafe {
             blas.gemm(
                 GemmConfig {
-                    transa: sys::cublasOperation_t::CUBLAS_OP_N,
-                    transb: sys::cublasOperation_t::CUBLAS_OP_N,
+                    transa: sys::hipblasOperation_t::HIPBLAS_OP_N,
+                    transb: sys::hipblasOperation_t::HIPBLAS_OP_N,
                     m: N as i32,
                     n: M as i32,
                     k: K as i32,
@@ -840,8 +843,8 @@ mod tests {
         unsafe {
             blas.gemm(
                 GemmConfig {
-                    transa: sys::cublasOperation_t::CUBLAS_OP_N,
-                    transb: sys::cublasOperation_t::CUBLAS_OP_N,
+                    transa: sys::hipblasOperation_t::HIPBLAS_OP_N,
+                    transb: sys::hipblasOperation_t::HIPBLAS_OP_N,
                     m: N as i32,
                     n: M as i32,
                     k: K as i32,

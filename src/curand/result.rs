@@ -10,13 +10,13 @@ use std::mem::MaybeUninit;
 /// Wrapper around [sys::curandStatus_t].
 /// See [cuRAND docs](https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1gb94a31d5c165858c96b6c18b70644437)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CurandError(pub sys::curandStatus_t);
+pub struct CurandError(pub sys::hiprandStatus_t);
 
-impl sys::curandStatus_t {
+impl sys::hiprandStatus_t {
     /// Transforms into a [Result] of [CurandError]
     pub fn result(self) -> Result<(), CurandError> {
         match self {
-            sys::curandStatus_t::CURAND_STATUS_SUCCESS => Ok(()),
+            sys::hiprandStatus_t::HIPRAND_STATUS_SUCCESS => Ok(()),
             _ => Err(CurandError(self)),
         }
     }
@@ -35,19 +35,19 @@ impl std::error::Error for CurandError {}
 /// Create new random number generator with the default pseudo rng type.
 ///
 /// See [cuRAND docs](https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1g56ff2b3cf7e28849f73a1e22022bcbfd).
-pub fn create_generator() -> Result<sys::curandGenerator_t, CurandError> {
-    create_generator_kind(sys::curandRngType_t::CURAND_RNG_PSEUDO_DEFAULT)
+pub fn create_generator() -> Result<sys::hiprandGenerator_t, CurandError> {
+    create_generator_kind(sys::hiprandRngType_t::HIPRAND_RNG_PSEUDO_DEFAULT)
 }
 
 /// Create new random number generator.
 ///
 /// See [cuRAND docs](https://docs.nvidia.com/cuda/curand/group__HOST.html#group__HOST_1g56ff2b3cf7e28849f73a1e22022bcbfd).
 pub fn create_generator_kind(
-    kind: sys::curandRngType_t,
-) -> Result<sys::curandGenerator_t, CurandError> {
+    kind: sys::hiprandRngType_t,
+) -> Result<sys::hiprandGenerator_t, CurandError> {
     let mut generator = MaybeUninit::uninit();
     unsafe {
-        sys::curandCreateGenerator(generator.as_mut_ptr(), kind).result()?;
+        sys::hiprandCreateGenerator(generator.as_mut_ptr(), kind).result()?;
         Ok(generator.assume_init())
     }
 }
@@ -58,8 +58,8 @@ pub fn create_generator_kind(
 ///
 /// # Safety
 /// The generator must be allocated and not already freed.
-pub unsafe fn set_seed(generator: sys::curandGenerator_t, seed: u64) -> Result<(), CurandError> {
-    sys::curandSetPseudoRandomGeneratorSeed(generator, seed).result()
+pub unsafe fn set_seed(generator: sys::hiprandGenerator_t, seed: u64) -> Result<(), CurandError> {
+    sys::hiprandSetPseudoRandomGeneratorSeed(generator, seed).result()
 }
 
 /// Set the offset value of the pseudo-random number generator.
@@ -69,10 +69,10 @@ pub unsafe fn set_seed(generator: sys::curandGenerator_t, seed: u64) -> Result<(
 /// # Safety
 /// The generator must be allocated and not already freed.
 pub unsafe fn set_offset(
-    generator: sys::curandGenerator_t,
+    generator: sys::hiprandGenerator_t,
     offset: u64,
 ) -> Result<(), CurandError> {
-    sys::curandSetGeneratorOffset(generator, offset).result()
+    sys::hiprandSetGeneratorOffset(generator, offset).result()
 }
 
 /// Set the current stream for CURAND kernel launches.
@@ -83,10 +83,10 @@ pub unsafe fn set_offset(
 /// 1. The generator must be allocated and not already freed.
 /// 2. The stream must be allocated and not already freed.
 pub unsafe fn set_stream(
-    generator: sys::curandGenerator_t,
-    stream: sys::cudaStream_t,
+    generator: sys::hiprandGenerator_t,
+    stream: sys::hipStream_t,
 ) -> Result<(), CurandError> {
-    sys::curandSetStream(generator, stream).result()
+    sys::hiprandSetStream(generator, stream).result()
 }
 
 /// Destroy an existing generator.
@@ -95,8 +95,8 @@ pub unsafe fn set_stream(
 ///
 /// # Safety
 /// The generator must not have already been freed.
-pub unsafe fn destroy_generator(generator: sys::curandGenerator_t) -> Result<(), CurandError> {
-    sys::curandDestroyGenerator(generator).result()
+pub unsafe fn destroy_generator(generator: sys::hiprandGenerator_t) -> Result<(), CurandError> {
+    sys::hiprandDestroyGenerator(generator).result()
 }
 
 pub mod generate {
@@ -112,11 +112,11 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn uniform_f32(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f32,
         num: usize,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateUniform(gen, out, num).result()
+        sys::hiprandGenerateUniform(gen, out, num).result()
     }
 
     /// Fills `out` with `num` f64 values in the range (0.0, 1.0].
@@ -127,11 +127,11 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn uniform_f64(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f64,
         num: usize,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateUniformDouble(gen, out, num).result()
+        sys::hiprandGenerateUniformDouble(gen, out, num).result()
     }
 
     /// Fills `out` with `num` u32 values with all bits random.
@@ -142,11 +142,11 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn uniform_u32(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut u32,
         num: usize,
     ) -> Result<(), CurandError> {
-        sys::curandGenerate(gen, out, num).result()
+        sys::hiprandGenerate(gen, out, num).result()
     }
 
     /// Fills `out` with `num` f32 values from a normal distribution
@@ -158,13 +158,13 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn normal_f32(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f32,
         num: usize,
         mean: f32,
         std: f32,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateNormal(gen, out, num, mean, std).result()
+        sys::hiprandGenerateNormal(gen, out, num, mean, std).result()
     }
 
     /// Fills `out` with `num` f64 values from a normal distribution
@@ -176,13 +176,13 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn normal_f64(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f64,
         num: usize,
         mean: f64,
         std: f64,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateNormalDouble(gen, out, num, mean, std).result()
+        sys::hiprandGenerateNormalDouble(gen, out, num, mean, std).result()
     }
 
     /// Fills `out` with `num` f32 values from a log normal distribution
@@ -194,13 +194,13 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn log_normal_f32(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f32,
         num: usize,
         mean: f32,
         std: f32,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateLogNormal(gen, out, num, mean, std).result()
+        sys::hiprandGenerateLogNormal(gen, out, num, mean, std).result()
     }
 
     /// Fills `out` with `num` f64 values from a normal distribution
@@ -212,13 +212,13 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn log_normal_f64(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut f64,
         num: usize,
         mean: f64,
         std: f64,
     ) -> Result<(), CurandError> {
-        sys::curandGenerateLogNormalDouble(gen, out, num, mean, std).result()
+        sys::hiprandGenerateLogNormalDouble(gen, out, num, mean, std).result()
     }
 
     /// Fills `out` with `num` u32 values from a poisson distribution
@@ -230,12 +230,12 @@ pub mod generate {
     /// 1. generator must have been allocated and not freed.
     /// 2. `out` point to `num` values
     pub unsafe fn poisson_u32(
-        gen: sys::curandGenerator_t,
+        gen: sys::hiprandGenerator_t,
         out: *mut u32,
         num: usize,
         lambda: f64,
     ) -> Result<(), CurandError> {
-        sys::curandGeneratePoisson(gen, out, num, lambda).result()
+        sys::hiprandGeneratePoisson(gen, out, num, lambda).result()
     }
 }
 
@@ -246,19 +246,19 @@ pub trait UniformFill<T> {
     unsafe fn fill(self, out: *mut T, num: usize) -> Result<(), CurandError>;
 }
 
-impl UniformFill<f32> for sys::curandGenerator_t {
+impl UniformFill<f32> for sys::hiprandGenerator_t {
     unsafe fn fill(self, out: *mut f32, num: usize) -> Result<(), CurandError> {
         generate::uniform_f32(self, out, num)
     }
 }
 
-impl UniformFill<f64> for sys::curandGenerator_t {
+impl UniformFill<f64> for sys::hiprandGenerator_t {
     unsafe fn fill(self, out: *mut f64, num: usize) -> Result<(), CurandError> {
         generate::uniform_f64(self, out, num)
     }
 }
 
-impl UniformFill<u32> for sys::curandGenerator_t {
+impl UniformFill<u32> for sys::hiprandGenerator_t {
     unsafe fn fill(self, out: *mut u32, num: usize) -> Result<(), CurandError> {
         generate::uniform_u32(self, out, num)
     }
@@ -271,13 +271,13 @@ pub trait NormalFill<T> {
     unsafe fn fill(self, o: *mut T, n: usize, m: T, s: T) -> Result<(), CurandError>;
 }
 
-impl NormalFill<f32> for sys::curandGenerator_t {
+impl NormalFill<f32> for sys::hiprandGenerator_t {
     unsafe fn fill(self, o: *mut f32, n: usize, m: f32, s: f32) -> Result<(), CurandError> {
         generate::normal_f32(self, o, n, m, s)
     }
 }
 
-impl NormalFill<f64> for sys::curandGenerator_t {
+impl NormalFill<f64> for sys::hiprandGenerator_t {
     unsafe fn fill(self, o: *mut f64, n: usize, m: f64, s: f64) -> Result<(), CurandError> {
         generate::normal_f64(self, o, n, m, s)
     }
@@ -290,13 +290,13 @@ pub trait LogNormalFill<T> {
     unsafe fn fill(self, o: *mut T, n: usize, m: T, s: T) -> Result<(), CurandError>;
 }
 
-impl LogNormalFill<f32> for sys::curandGenerator_t {
+impl LogNormalFill<f32> for sys::hiprandGenerator_t {
     unsafe fn fill(self, o: *mut f32, n: usize, m: f32, s: f32) -> Result<(), CurandError> {
         generate::log_normal_f32(self, o, n, m, s)
     }
 }
 
-impl LogNormalFill<f64> for sys::curandGenerator_t {
+impl LogNormalFill<f64> for sys::hiprandGenerator_t {
     unsafe fn fill(self, o: *mut f64, n: usize, m: f64, s: f64) -> Result<(), CurandError> {
         generate::log_normal_f64(self, o, n, m, s)
     }

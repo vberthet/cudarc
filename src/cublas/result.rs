@@ -3,12 +3,12 @@ use core::ffi::{c_int, c_longlong, c_void};
 use core::mem::MaybeUninit;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct CublasError(pub sys::cublasStatus_t);
+pub struct CublasError(pub sys::hipblasStatus_t);
 
-impl sys::cublasStatus_t {
+impl sys::hipblasStatus_t {
     pub fn result(self) -> Result<(), CublasError> {
         match self {
-            sys::cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+            sys::hipblasStatus_t::HIPBLAS_STATUS_SUCCESS => Ok(()),
             _ => Err(CublasError(self)),
         }
     }
@@ -26,10 +26,10 @@ impl std::error::Error for CublasError {}
 
 /// Creates a handle to the cuBLAS library. See
 /// [nvidia docs](https://docs.nvidia.com/cuda/cublas/index.html#cublascreate)
-pub fn create_handle() -> Result<sys::cublasHandle_t, CublasError> {
+pub fn create_handle() -> Result<sys::hipblasHandle_t, CublasError> {
     let mut handle = MaybeUninit::uninit();
     unsafe {
-        sys::cublasCreate_v2(handle.as_mut_ptr()).result()?;
+        sys::hipblasCreate(handle.as_mut_ptr()).result()?;
         Ok(handle.assume_init())
     }
 }
@@ -40,8 +40,8 @@ pub fn create_handle() -> Result<sys::cublasHandle_t, CublasError> {
 /// # Safety
 ///
 /// `handle` must not have been freed already.
-pub unsafe fn destroy_handle(handle: sys::cublasHandle_t) -> Result<(), CublasError> {
-    sys::cublasDestroy_v2(handle).result()
+pub unsafe fn destroy_handle(handle: sys::hipblasHandle_t) -> Result<(), CublasError> {
+    sys::hipblasDestroy(handle).result()
 }
 
 /// Sets the stream cuBLAS will use. See
@@ -51,10 +51,10 @@ pub unsafe fn destroy_handle(handle: sys::cublasHandle_t) -> Result<(), CublasEr
 ///
 /// `handle` and `stream` must be valid.
 pub unsafe fn set_stream(
-    handle: sys::cublasHandle_t,
-    stream: sys::cudaStream_t,
+    handle: sys::hipblasHandle_t,
+    stream: sys::hipStream_t,
 ) -> Result<(), CublasError> {
-    sys::cublasSetStream_v2(handle, stream).result()
+    sys::hipblasSetStream(handle, stream).result()
 }
 
 /// Single precision matrix vector multiplication. See
@@ -67,8 +67,8 @@ pub unsafe fn set_stream(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn sgemv(
-    handle: sys::cublasHandle_t,
-    trans: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    trans: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     alpha: *const f32,
@@ -80,7 +80,7 @@ pub unsafe fn sgemv(
     y: *mut f32,
     incy: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasSgemv_v2(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy).result()
+    sys::hipblasSgemv(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy).result()
 }
 
 /// Double precision matrix vector multiplication. See
@@ -93,8 +93,8 @@ pub unsafe fn sgemv(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn dgemv(
-    handle: sys::cublasHandle_t,
-    trans: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    trans: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     alpha: *const f64,
@@ -106,7 +106,7 @@ pub unsafe fn dgemv(
     y: *mut f64,
     incy: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasDgemv_v2(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy).result()
+    sys::hipblasDgemv(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy).result()
 }
 
 #[cfg(feature = "f16")]
@@ -120,9 +120,9 @@ pub unsafe fn dgemv(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn hgemm(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -151,9 +151,9 @@ pub unsafe fn hgemm(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn sgemm(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -166,7 +166,7 @@ pub unsafe fn sgemm(
     c: *mut f32,
     ldc: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasSgemm_v2(
+    sys::hipblasSgemm(
         handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
     )
     .result()
@@ -182,9 +182,9 @@ pub unsafe fn sgemm(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn dgemm(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -197,7 +197,7 @@ pub unsafe fn dgemm(
     c: *mut f64,
     ldc: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasDgemm_v2(
+    sys::hipblasDgemm(
         handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
     )
     .result()
@@ -214,9 +214,9 @@ pub unsafe fn dgemm(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn hgemm_strided_batched(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -250,9 +250,9 @@ pub unsafe fn hgemm_strided_batched(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn sgemm_strided_batched(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -269,7 +269,7 @@ pub unsafe fn sgemm_strided_batched(
     stride_c: c_longlong,
     batch_size: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasSgemmStridedBatched(
+    sys::hipblasSgemmStridedBatched(
         handle, transa, transb, m, n, k, alpha, a, lda, stride_a, b, ldb, stride_b, beta, c, ldc,
         stride_c, batch_size,
     )
@@ -286,9 +286,9 @@ pub unsafe fn sgemm_strided_batched(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn dgemm_strided_batched(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
@@ -305,7 +305,7 @@ pub unsafe fn dgemm_strided_batched(
     stride_c: c_longlong,
     batch_size: c_int,
 ) -> Result<(), CublasError> {
-    sys::cublasDgemmStridedBatched(
+    sys::hipblasDgemmStridedBatched(
         handle, transa, transb, m, n, k, alpha, a, lda, stride_a, b, ldb, stride_b, beta, c, ldc,
         stride_c, batch_size,
     )
@@ -322,27 +322,27 @@ pub unsafe fn dgemm_strided_batched(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm_ex(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
     alpha: *const c_void,
     a: *const c_void,
-    a_type: sys::cudaDataType,
+    a_type: sys::hipDataType,
     lda: c_int,
     b: *const c_void,
-    b_type: sys::cudaDataType,
+    b_type: sys::hipDataType,
     ldb: c_int,
     beta: *const c_void,
     c: *mut c_void,
-    c_type: sys::cudaDataType,
+    c_type: sys::hipDataType,
     ldc: c_int,
-    compute_type: sys::cublasComputeType_t,
-    algo: sys::cublasGemmAlgo_t,
+    compute_type: sys::hipblasComputeType_t,
+    algo: sys::hipblasGemmAlgo_t,
 ) -> Result<(), CublasError> {
-    sys::cublasGemmEx(
+    sys::hipblasGemmEx_v2(
         handle,
         transa,
         transb,
@@ -376,31 +376,31 @@ pub unsafe fn gemm_ex(
 /// - the strides and sizes must be sized correctly
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn gemm_strided_batched_ex(
-    handle: sys::cublasHandle_t,
-    transa: sys::cublasOperation_t,
-    transb: sys::cublasOperation_t,
+    handle: sys::hipblasHandle_t,
+    transa: sys::hipblasOperation_t,
+    transb: sys::hipblasOperation_t,
     m: c_int,
     n: c_int,
     k: c_int,
     alpha: *const c_void,
     a: *const c_void,
-    a_type: sys::cudaDataType,
+    a_type: sys::hipDataType,
     lda: c_int,
     stride_a: c_longlong,
     b: *const c_void,
-    b_type: sys::cudaDataType,
+    b_type: sys::hipDataType,
     ldb: c_int,
     stride_b: c_longlong,
     beta: *const c_void,
     c: *mut c_void,
-    c_type: sys::cudaDataType,
+    c_type: sys::hipDataType,
     ldc: c_int,
     stride_c: c_longlong,
     batch_count: c_int,
-    compute_type: sys::cublasComputeType_t,
-    algo: sys::cublasGemmAlgo_t,
+    compute_type: sys::hipblasComputeType_t,
+    algo: sys::hipblasGemmAlgo_t,
 ) -> Result<(), CublasError> {
-    sys::cublasGemmStridedBatchedEx(
+    sys::hipblasGemmStridedBatchedEx_v2(
         handle,
         transa,
         transb,
