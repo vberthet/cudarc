@@ -500,7 +500,8 @@ extern \"C\" __global__ void floating(float f, double d) {
 
     #[cfg(feature = "f16")]
     const HALF_KERNELS: &str = "
-#include \"cuda_fp16.h\"
+#include \"hip/hip_fp16.h\"
+#include <assert.h>
 
 extern \"C\" __global__ void halfs(__half h) {
     assert(__habs(h - __float2half(1.234)) <= __float2half(1e-4));
@@ -515,8 +516,6 @@ extern \"C\" __global__ void halfs(__half h) {
         let ptx = compile_ptx_with_opts(
             HALF_KERNELS,
             CompileOptions {
-                include_paths: std::vec!["/usr/include".into()],
-                arch: Some("compute_53"),
                 ..Default::default()
             },
         )

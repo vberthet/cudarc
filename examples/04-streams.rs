@@ -5,7 +5,8 @@ use cudarc::{
 
 fn main() -> Result<(), DriverError> {
     let dev = CudaDevice::new(0)?;
-    dev.load_ptx(Ptx::from_file("./examples/sin.ptx"), "sin", &["sin_kernel"])?;
+    // see 03-launch-kernel.rs for compilation instructions
+    dev.load_ptx(Ptx::from_file("./examples/sin.co"), "sin", &["sin_kernel"])?;
 
     let n = 3;
     let cfg = LaunchConfig::for_num_elems(n);

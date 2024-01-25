@@ -27,6 +27,12 @@ impl Ptx {
         Self(PtxKind::Src(src.into()))
     }
 
+    /// Creates a Ptx from the source string of a pre-compiled .ptx
+    /// file.
+    pub fn from_bytes<S: Into<Vec<u8>>>(src: S) -> Self {
+        Self(PtxKind::Image(src.into().iter().map(|b| *b as c_char).collect()))
+    }
+
     /// Get the compiled source as a string.
     pub fn to_src(&self) -> String {
         match &self.0 {
@@ -42,9 +48,9 @@ impl Ptx {
     }
 }
 
-impl<S: Into<String>> From<S> for Ptx {
+impl<S: Into<Vec<u8>>> From<S> for Ptx {
     fn from(value: S) -> Self {
-        Self::from_src(value)
+        Self::from_bytes(value)
     }
 }
 

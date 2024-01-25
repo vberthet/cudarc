@@ -6,8 +6,10 @@ use cudarc::{
 fn main() -> Result<(), DriverError> {
     let dev = CudaDevice::new(0)?;
 
-    // You can load a function from a pre-compiled PTX like so:
-    dev.load_ptx(Ptx::from_file("./examples/sin.ptx"), "sin", &["sin_kernel"])?;
+    // You can compile your kernel using the following command (change --offload-arch in accordance with your gpu) :
+    //      hipcc --genco --offload-arch=gfx1030 -std=c++17 sin.cu -o sin.co
+    // Then you can load your pre-compiled kernel like so:
+    dev.load_ptx(Ptx::from_file("./examples/sin.co"), "sin", &["sin_kernel"])?;
 
     // and then retrieve the function with `get_func`
     let f = dev.get_func("sin", "sin_kernel").unwrap();
