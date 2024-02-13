@@ -14,6 +14,7 @@
 use super::sys;
 use core::ffi::{c_uchar, c_uint, c_void, CStr};
 use std::mem::MaybeUninit;
+use std::println;
 
 /// Wrapper around [sys::CUresult]. See
 /// nvidia's [CUresult docs](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html#group__CUDA__TYPES_1gc6c391505e117393cc2558fff6bfc2e9)
@@ -136,6 +137,30 @@ pub mod device {
         let mut value = MaybeUninit::uninit();
         sys::hipDeviceGetAttribute(value.as_mut_ptr(), attrib, dev).result()?;
         Ok(value.assume_init())
+    }
+}
+
+pub mod function {
+    use crate::driver::sys::hipFuncAttribute;
+    use super::sys::{self};
+
+    /// Sets the specific attribute of a cuda function.
+    ///
+    /// See [cuda docs](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXECUTION.html#group__CUDART__EXECUTION_1g317e77d2657abf915fd9ed03e75f3eb0)
+    ///
+    /// # Safety
+    /// Function must exist.
+    pub unsafe fn set_function_attribute(
+        f: sys::hipFunction_t,
+        attribute: hipFuncAttribute,
+        value: i32,
+    ) -> Result<(), super::DriverError> {
+        todo!()
+        // unsafe {
+        //     sys::hipFuncSetAttribute(f, attribute, value).result()?;
+        // }
+        //
+        // Ok(())
     }
 }
 
